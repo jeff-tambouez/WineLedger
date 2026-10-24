@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Bowl of the glass -->
+    <path
+        android:fillColor="#990044"
+        android:pathData="M38,26 L70,26 C70,42 64,52 54,54 C44,52 38,42 38,26 Z" />
+    <!-- Wine level highlight -->
+    <path
+        android:fillColor="#CC0066"
+        android:pathData="M40,32 L68,32 C67.5,40 63.5,47 54,49 C44.5,47 40.5,40 40,32 Z" />
+    <!-- Stem -->
+    <path
+        android:fillColor="#076967"
+        android:pathData="M52.5,54 L55.5,54 L55.5,76 L52.5,76 Z" />
+    <!-- Foot -->
+    <path
+        android:fillColor="#076967"
+        android:pathData="M42,78 C42,75.5 66,75.5 66,78 L66,80 L42,80 Z" />
+</vector>
