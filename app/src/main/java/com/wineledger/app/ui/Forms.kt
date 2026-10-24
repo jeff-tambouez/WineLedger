@@ -46,6 +46,7 @@ import com.wineledger.app.data.AppData
 import com.wineledger.app.data.Guide
 import com.wineledger.app.logic.FORMATS
 import com.wineledger.app.logic.formatLabel
+import com.wineledger.app.logic.isoToDateDigits
 import com.wineledger.app.logic.norm
 import com.wineledger.app.logic.todayIso
 import com.wineledger.app.logic.wineKey
@@ -144,7 +145,7 @@ private fun PhotoSection(photo: String?, vm: AppViewModel, onPhoto: (String?) ->
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Photo", style = MaterialTheme.typography.labelLarge)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            PhotoThumb(photo?.let { vm.photoFile(it, true) }, 88.dp)
+            PhotoThumb(photo?.let { vm.photoFile(it, true) }, 88.dp, full = photo?.let { vm.photoFile(it, false) })
             Spacer(Modifier.width(12.dp))
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -177,8 +178,6 @@ private fun DiscardPhotoOnLeave(key: Any, photo: String?, vm: AppViewModel, save
     }
 }
 
-private fun isDate(s: String) = s.isEmpty() || Regex("\\d{4}-\\d{2}-\\d{2}").matches(s)
-
 // =====================================================================
 // Bottle form: five fields, then Save
 // =====================================================================
@@ -198,7 +197,7 @@ fun BottleFormScreen(vm: AppViewModel, initial: BottleDraft, key: Any) {
     DiscardPhotoOnLeave(key, d.photo, vm, saved)
 
     val editing = d.editId != 0L
-    val ready = d.producer.isNotBlank() && d.name.isNotBlank() && d.style.isNotEmpty() && isDate(d.purchaseDate)
+    val ready = d.producer.isNotBlank() && d.name.isNotBlank() && d.style.isNotEmpty() && validDateDigits(d.purchaseDate)
 
     fun doSave(addAnother: Boolean) {
         if (!addAnother) saved = true
@@ -293,15 +292,16 @@ fun BottleFormScreen(vm: AppViewModel, initial: BottleDraft, key: Any) {
                     )
                 }
                 AppField(d.supplier, { d = d.copy(supplier = it) }, "Bought from")
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    AppField(
-                        d.purchaseDate, { d = d.copy(purchaseDate = it.take(10)) },
-                        "Purchase date (YYYY-MM-DD)", Modifier.weight(1f), keyboard = KeyboardType.Number,
+                Row(verticalAlignment = Alignment.Top) {
+                    DateField(
+                        d.purchaseDate, { d = d.copy(purchaseDate = it) },
+                        "Purchase date", Modifier.weight(1f),
                     )
-                    QuietButton("Today", onClick = { d = d.copy(purchaseDate = todayIso()) })
-                }
-                if (!isDate(d.purchaseDate)) {
-                    Text("Use the format 2026-10-23.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    QuietButton(
+                        "Today",
+                        onClick = { d = d.copy(purchaseDate = isoToDateDigits(todayIso())) },
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     AppField(d.country, { d = d.copy(country = it) }, "Country", Modifier.weight(1f))

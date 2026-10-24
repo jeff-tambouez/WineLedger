@@ -217,7 +217,7 @@ private fun WineGroupCard(g: WineGroup, vm: AppViewModel, expanded: Boolean, onT
         Column(Modifier.clickable(onClick = onToggle).padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (photo != null) {
-                    PhotoThumb(vm.photoFile(photo, true), 56.dp)
+                    PhotoThumb(vm.photoFile(photo, true), 56.dp, full = vm.photoFile(photo, false))
                     Spacer(Modifier.width(12.dp))
                 }
                 Column(Modifier.weight(1f)) {
@@ -365,19 +365,34 @@ private fun InvitationCard(inv: Invitation, data: AppData, vm: AppViewModel) {
     var score by remember(inv.id) { mutableStateOf("") }
     SoftCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp)) {
-            Eyebrow(if (inv.stage == 0) "Did you also drink this bottle?" else "Do you want to rate it?")
+            Eyebrow(
+                when (inv.stage) {
+                    Invitation.STAGE_BACKLOG -> "Tasting to complete"
+                    0 -> "Did you also drink this bottle?"
+                    else -> "Do you want to rate it?"
+                }
+            )
             Spacer(Modifier.height(4.dp))
             Text(
                 wine.name + (inv.vintage?.let { " $it" } ?: ""),
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
-                wine.producer + if (from != null && from.id != inv.profileId) " · opened by ${from.name}" else "",
+                wine.producer + when {
+                    from == null || from.id == inv.profileId -> ""
+                    inv.stage == Invitation.STAGE_BACKLOG -> " · added by ${from.name}"
+                    else -> " · opened by ${from.name}"
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(8.dp))
-            if (inv.stage == 0) {
+            if (inv.stage == Invitation.STAGE_BACKLOG) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    PrimaryButton("Complete", onClick = { vm.completeBacklog(inv) })
+                    GhostButton("Remove", onClick = { vm.dismissBacklog(inv.id) })
+                }
+            } else if (inv.stage == 0) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     PrimaryButton("Yes", onClick = { vm.invitationYes(inv.id); rating = true })
                     GhostButton("No", onClick = { vm.invitationNo(inv.id) })

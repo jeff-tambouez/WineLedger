@@ -78,6 +78,12 @@ interface AppDao {
     @Query("SELECT * FROM invitations WHERE wineId = :wineId AND profileId = :profileId AND year = :year LIMIT 1")
     suspend fun findInvitation(wineId: Long, profileId: Long, year: Int): Invitation?
 
+    @Query("SELECT * FROM invitations WHERE wineId = :wineId AND profileId = :profileId")
+    suspend fun invitationsFor(wineId: Long, profileId: Long): List<Invitation>
+
+    @Query("SELECT COUNT(*) FROM tastings WHERE wineId = :wineId AND profileId = :profileId")
+    suspend fun tastingCount(wineId: Long, profileId: Long): Int
+
     @Query("SELECT photo FROM wines WHERE photo IS NOT NULL")
     suspend fun winePhotos(): List<String>
 

@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -79,6 +81,8 @@ fun AppRoot(vm: AppViewModel) {
 
     val profile = data.activeProfile(activeId)
     val onMain = screen is Screen.Main
+    // cards waiting in the active profile's ledger (backlog and "did you also drink this?")
+    val pending = data.invitations.count { it.profileId == profile?.id }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -104,15 +108,19 @@ fun AppRoot(vm: AppViewModel) {
                             selected = tab == t,
                             onClick = { vm.selectTab(t) },
                             icon = {
-                                TabIcon(
-                                    when (t) {
-                                        Tab.LEDGER -> TabGlyph.LEDGER
-                                        Tab.CELLAR -> TabGlyph.CELLAR
-                                        Tab.VERONELLI -> TabGlyph.STAR
-                                        Tab.STATS -> TabGlyph.STATS
-                                    },
-                                    LocalContentColor.current,
-                                )
+                                val glyph = when (t) {
+                                    Tab.LEDGER -> TabGlyph.LEDGER
+                                    Tab.CELLAR -> TabGlyph.CELLAR
+                                    Tab.VERONELLI -> TabGlyph.STAR
+                                    Tab.STATS -> TabGlyph.STATS
+                                }
+                                if (t == Tab.LEDGER && pending > 0) {
+                                    BadgedBox(badge = { Badge { Text(pending.toString()) } }) {
+                                        TabIcon(glyph, LocalContentColor.current)
+                                    }
+                                } else {
+                                    TabIcon(glyph, LocalContentColor.current)
+                                }
                             },
                             label = { Text(t.label) },
                         )

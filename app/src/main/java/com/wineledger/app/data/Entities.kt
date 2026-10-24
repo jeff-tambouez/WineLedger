@@ -125,8 +125,9 @@ data class WishlistItem(
 )
 
 /**
- * "Did you also drink this bottle?" card waiting for another profile.
- * stage 0 = question asked, stage 1 = answered yes, rating pending.
+ * Card waiting for a profile at the top of its ledger.
+ * stage 0 = "Did you also drink this bottle?" asked, stage 1 = answered yes, rating pending,
+ * stage 2 = "Tasting to complete": the other profile put this wine in the cellar.
  */
 @Entity(
     tableName = "invitations",
@@ -151,10 +152,14 @@ data class Invitation(
     val wineId: Long,
     /** The profile that sees the card. */
     val profileId: Long,
-    /** The profile that tasted. */
+    /** The profile that tasted (stages 0 and 1) or that added the bottle (stage 2). */
     val fromProfileId: Long,
     val year: Int,
     val vintage: Int? = null,
     val stage: Int = 0,
     val createdAt: Long = 0,
-)
+) {
+    companion object {
+        const val STAGE_BACKLOG = 2
+    }
+}

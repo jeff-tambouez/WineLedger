@@ -7,6 +7,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +23,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
@@ -52,6 +55,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -64,6 +68,13 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -73,10 +84,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.wineledger.app.data.Profile
 import com.wineledger.app.logic.Awards
 import com.wineledger.app.logic.Counted
+import com.wineledger.app.logic.dateDigitsToIso
 import com.wineledger.app.logic.fmtScore
 import java.io.File
 import androidx.compose.ui.graphics.Color as ComposeColor
@@ -584,28 +598,149 @@ fun validScore(text: String): Boolean {
     return n in 0.0..100.0
 }
 
+/** Shows the typed digits as DD/MM/YYYY, adding the slashes itself. */
+private object DateMask : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText {
+        val digits = text.text.take(8)
+        val shown = StringBuilder()
+        digits.forEachIndexed { i, c ->
+            if (i == 2 || i == 4) shown.append('/')
+            shown.append(c)
+        }
+        val mapping = object : OffsetMapping {
+            override fun originalToTransformed(offset: Int): Int =
+                when {
+                    offset <= 2 -> offset
+                    offset <= 4 -> offset + 1
+                    else -> offset + 2
+                }.coerceAtMost(shown.length)
+
+            override fun transformedToOriginal(offset: Int): Int =
+                when {
+                    offset <= 2 -> offset
+                    offset <= 5 -> offset - 1
+                    else -> offset - 2
+                }.coerceIn(0, digits.length)
+        }
+        return TransformedText(AnnotatedString(shown.toString()), mapping)
+    }
+}
+
+/** True when the digits are empty or make a real DD/MM/YYYY date. */
+fun validDateDigits(digits: String): Boolean = digits.isEmpty() || dateDigitsToIso(digits) != null
+
+/**
+ * Date entry without typing separators: the person types the eight digits (23102026)
+ * and the field displays 23/10/2026. [digits] holds only the digits.
+ */
+@Composable
+fun DateField(
+    digits: String,
+    onDigits: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier) {
+        OutlinedTextField(
+            value = digits,
+            onValueChange = { onDigits(it.filter { c -> c in '0'..'9' }.take(8)) },
+            label = { Text(label) },
+            placeholder = { Text("DD/MM/YYYY") },
+            singleLine = true,
+            visualTransformation = DateMask,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            isError = !validDateDigits(digits) && digits.length == 8,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+        )
+        if (digits.length == 8 && !validDateDigits(digits)) {
+            Text("Not a real date.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        } else if (digits.isNotEmpty() && digits.length < 8) {
+            Text(
+                "Type day, month and year: 8 digits.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
 // =====================================================================
 // Photo
 // =====================================================================
 
+/**
+ * Square thumbnail. When the photo exists, tapping it opens it full screen;
+ * [full] is the large version, [file] is used when it is missing.
+ */
 @Composable
-fun PhotoThumb(file: File?, size: Dp, modifier: Modifier = Modifier) {
+fun PhotoThumb(file: File?, size: Dp, modifier: Modifier = Modifier, full: File? = null) {
+    val exists = file != null && file.exists()
+    var open by remember { mutableStateOf(false) }
     Box(
         modifier
             .size(size)
             .clip(RoundedCornerShape(10.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .then(if (exists) Modifier.clickable { open = true } else Modifier),
         contentAlignment = Alignment.Center,
     ) {
-        if (file != null && file.exists()) {
+        if (exists) {
             AsyncImage(
                 model = file,
-                contentDescription = "Wine photo",
-                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                contentDescription = "Wine photo, tap to enlarge",
+                contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxWidth().fillMaxHeight(),
             )
         } else {
             Text("🍷", fontSize = (size.value * 0.4f).sp)
+        }
+    }
+    if (open && exists) {
+        val big = full?.takeIf { it.exists() } ?: file!!
+        PhotoViewer(big, onDismiss = { open = false })
+    }
+}
+
+/** Full-screen photo on a dark backdrop. Pinch to zoom, drag when zoomed, tap anywhere to close. */
+@Composable
+fun PhotoViewer(file: File, onDismiss: () -> Unit) {
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.94f))
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onDismiss() },
+            contentAlignment = Alignment.Center,
+        ) {
+            AsyncImage(
+                model = file,
+                contentDescription = "Wine photo",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTransformGestures { _, pan, zoom, _ ->
+                            scale = (scale * zoom).coerceIn(1f, 5f)
+                            offset = if (scale == 1f) Offset.Zero else offset + pan
+                        }
+                    }
+                    .graphicsLayer(
+                        scaleX = scale, scaleY = scale,
+                        translationX = offset.x, translationY = offset.y,
+                    ),
+            )
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(8.dp),
+            ) {
+                Icon(Icons.Filled.Close, contentDescription = "Close", tint = Color.White)
+            }
         }
     }
 }

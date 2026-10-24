@@ -13,6 +13,7 @@ import com.wineledger.app.data.Backup
 import com.wineledger.app.data.Guide
 import com.wineledger.app.data.GuideData
 import com.wineledger.app.data.ImportException
+import com.wineledger.app.data.Invitation
 import com.wineledger.app.data.LedgerExport
 import com.wineledger.app.data.LedgerImport
 import com.wineledger.app.data.PhotoStore
@@ -23,8 +24,10 @@ import com.wineledger.app.data.TastingInput
 import com.wineledger.app.data.Undo
 import com.wineledger.app.data.WineInfo
 import com.wineledger.app.logic.currentYear
+import com.wineledger.app.logic.dateDigitsToIso
 import com.wineledger.app.logic.fmtNumber
 import com.wineledger.app.logic.guideKey
+import com.wineledger.app.logic.isoToDateDigits
 import com.wineledger.app.logic.GuideWine
 import com.wineledger.app.logic.parseDoubleLoose
 import com.wineledger.app.logic.parseIntLoose
@@ -62,6 +65,7 @@ data class BottleDraft(
     val readyFrom: String = "",
     val drinkBy: String = "",
     val supplier: String = "",
+    /** Digits typed by the person, DDMMYYYY. Converted from and to an ISO date by the view model. */
     val purchaseDate: String = "",
     val notes: String = "",
     val photo: String? = null,
@@ -200,7 +204,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 country = w.country, region = w.region, grapes = w.grapes, format = b.format,
                 price = b.price?.let { fmtNumber(it) }.orEmpty(),
                 readyFrom = b.readyFrom?.toString().orEmpty(), drinkBy = b.drinkBy?.toString().orEmpty(),
-                supplier = b.supplier, purchaseDate = b.purchaseDate, notes = b.notes,
+                supplier = b.supplier, purchaseDate = isoToDateDigits(b.purchaseDate), notes = b.notes,
                 photo = b.photo ?: w.photo, moreOpen = true,
             )
         )
@@ -263,7 +267,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             vintage = vintage, quantity = draft.quantity.coerceAtLeast(1), format = draft.format,
             price = parseDoubleLoose(draft.price), readyFrom = parseIntLoose(draft.readyFrom),
             drinkBy = parseIntLoose(draft.drinkBy), supplier = draft.supplier,
-            purchaseDate = draft.purchaseDate, notes = draft.notes, photo = draft.photo,
+            purchaseDate = dateDigitsToIso(draft.purchaseDate).orEmpty(), notes = draft.notes,
+            photo = draft.photo, addedBy = resolveProfileId(),
         )
         viewModelScope.launch {
             val saved = repo.saveBottle(input)
@@ -339,6 +344,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ------------------------------------------------------------------
     // Invitations, wishlist, profiles
     // ------------------------------------------------------------------
+
+    /** "Tasting to complete": opens the tasting form with the wine already filled in. */
+    fun completeBacklog(inv: Invitation) {
+        val w = data.value.wines[inv.wineId] ?: return
+        newTasting(
+            TastingDraft(
+                producer = w.producer, name = w.name, style = w.style, country = w.country,
+                region = w.region, grapes = w.grapes, photo = w.photo,
+            )
+        )
+    }
+
+    fun dismissBacklog(id: Long) {
+        viewModelScope.launch {
+            val undo = repo.backlogDismiss(id)
+            toast("Removed from the backlog", undo)
+        }
+    }
 
     fun invitationNo(id: Long) {
         viewModelScope.launch { repo.invitationNo(id) }

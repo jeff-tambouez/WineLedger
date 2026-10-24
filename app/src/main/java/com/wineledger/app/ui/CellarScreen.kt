@@ -287,7 +287,7 @@ private fun BottleCard(row: BottleRow, vm: AppViewModel, onOpen: () -> Unit) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (photo != null) {
-                    PhotoThumb(vm.photoFile(photo, true), 56.dp)
+                    PhotoThumb(vm.photoFile(photo, true), 56.dp, full = vm.photoFile(photo, false))
                     Spacer(Modifier.width(12.dp))
                 }
                 Column(Modifier.weight(1f)) {

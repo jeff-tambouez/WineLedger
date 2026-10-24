@@ -39,9 +39,17 @@ Le reste (Room, Compose, ViewModel, import/export) peut demander quelques correc
 - Pays, région et cépages sont dans « Plus de détails ».
 - L'import ajoute les lignes et ignore les doublons exacts.
 - Renommer un vin le modifie sur place.
-- Date d'achat : champ texte avec bouton « Aujourd'hui ».
+- Date d'achat : on tape les 8 chiffres (23102026), le champ affiche 23/10/2026 ; bouton « Today ». Stockée en ISO.
+- Backlog « Tasting to complete » : quand un profil ajoute une nouvelle bouteille, chaque autre profil qui n'a pas encore goûté ce vin
+  reçoit une carte en haut de son Journal (badge sur l'onglet) avec **Complete** (formulaire de dégustation prérempli) ou **Remove** (avec Undo).
+  Réutilise la table `invitations` (`stage = 2`), donc sans migration. Les imports CSV n'en créent pas.
+- Photos : un appui sur une photo existante l'ouvre en grand (pincer pour zoomer, appui pour fermer).
 - Ajouter une bouteille identique (même vin, millésime, format) additionne les quantités.
 - Les textes de l'interface sont en anglais, comme dans le cahier des charges.
+
+## Importer une liste de vins
+
+`tools/build_cellar_import.py` génère `tools/cellar_import.csv` (format de l'export Cave). Dans l'app : Réglages, Import, choisir ce fichier.
 
 ## Données
 

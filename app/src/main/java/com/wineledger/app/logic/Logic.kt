@@ -38,6 +38,22 @@ fun todayIso(): String = LocalDate.now().toString()
 
 fun currentYear(): Int = LocalDate.now().year
 
+/** "2026-10-23" to "23102026", the digits a person types. Anything that is not an ISO date gives "". */
+fun isoToDateDigits(iso: String): String {
+    val d = runCatching { LocalDate.parse(iso) }.getOrNull() ?: return ""
+    return String.format(Locale.ROOT, "%02d%02d%04d", d.dayOfMonth, d.monthValue, d.year)
+}
+
+/** "23102026" to "2026-10-23". Null when the digits are incomplete or not a real date. */
+fun dateDigitsToIso(digits: String): String? {
+    if (digits.length != 8 || !digits.all { it in '0'..'9' }) return null
+    val year = digits.substring(4).toInt()
+    if (year !in 1900..2100) return null
+    return runCatching {
+        LocalDate.of(year, digits.substring(2, 4).toInt(), digits.substring(0, 2).toInt()).toString()
+    }.getOrNull()
+}
+
 // =====================================================================
 // Text normalisation
 // =====================================================================
