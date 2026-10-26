@@ -431,10 +431,16 @@ fun TastingFormScreen(vm: AppViewModel, initial: TastingDraft, key: Any) {
             AppField(d.region, { d = d.copy(region = it) }, "Region", Modifier.weight(1f))
         }
         AppField(d.grapes, { d = d.copy(grapes = it) }, "Grapes (comma separated)")
-        AppField(
-            d.year, { d = d.copy(year = it.filter { c -> c.isDigit() }.take(4)) },
-            "Tasting year", keyboard = KeyboardType.Number,
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            AppField(
+                d.vintage, { d = d.copy(vintage = it.filter { c -> c.isDigit() }.take(4)) },
+                "Vintage (optional)", Modifier.weight(1f), keyboard = KeyboardType.Number,
+            )
+            AppField(
+                d.year, { d = d.copy(year = it.filter { c -> c.isDigit() }.take(4)) },
+                "Tasting year", Modifier.weight(1f), keyboard = KeyboardType.Number,
+            )
+        }
         ScoreInput(d.score, { d = d.copy(score = it) })
         AppField(d.notes, { d = d.copy(notes = it) }, "Notes", singleLine = false)
         PhotoSection(d.photo, vm) { d = d.copy(photo = it) }

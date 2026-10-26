@@ -84,7 +84,7 @@ object LedgerImport {
         return when (value) {
             is JSONArray -> {
                 val objs = (0 until value.length()).mapNotNull { value.optJSONObject(it) }
-                val cellar = objs.firstOrNull()?.let { it.has("quantita") || it.has("posizione") || it.has("annata") } == true
+                val cellar = objs.firstOrNull()?.let { it.has("quantita") || it.has("posizione") } == true
                 if (cellar) ImportedRecords(bottles = objs.mapNotNull { bottleFrom(it) })
                 else ImportedRecords(tastings = objs.mapNotNull { tastingFrom(it) })
             }
@@ -121,7 +121,7 @@ object LedgerImport {
     private fun tastingFrom(o: JSONObject): ImportedTasting? {
         val wine = wineFrom(o) ?: return null
         val score = o.doubleOrNull("score") ?: return null
-        return ImportedTasting(wine, o.intOrNull("anno"), score)
+        return ImportedTasting(wine, o.intOrNull("anno"), score, vintage = o.intOrNull("annata"))
     }
 
     private fun bottleFrom(o: JSONObject): ImportedBottle? {
@@ -199,7 +199,8 @@ object LedgerImport {
         val cBy = col(DRINKBY)
         val cSupplier = col(SUPPLIER)
         val cPurchase = col(PURCHASE)
-        val isCellar = cQty >= 0 || cPlace >= 0 || cPrice >= 0 || cVintage >= 0 || cReady >= 0 || cBy >= 0 ||
+        // a "Vintage" column alone does not make a cellar file: tasting exports have one too
+        val isCellar = cQty >= 0 || cPlace >= 0 || cPrice >= 0 || cReady >= 0 || cBy >= 0 ||
             cFormat >= 0 || (cScore < 0 && cYear < 0)
 
         fun at(r: List<String>, c: Int): String = if (c in r.indices) r[c].trim() else ""
@@ -237,7 +238,7 @@ object LedgerImport {
                 tastings = body.mapNotNull { r ->
                     val wine = wineOf(r) ?: return@mapNotNull null
                     val score = parseDoubleLoose(at(r, cScore)) ?: return@mapNotNull null
-                    ImportedTasting(wine, parseIntLoose(at(r, cYear)), score, at(r, cNotes))
+                    ImportedTasting(wine, parseIntLoose(at(r, cYear)), score, at(r, cNotes), parseIntLoose(at(r, cVintage)))
                 }
             )
         }
@@ -257,13 +258,16 @@ object LedgerExport {
     /** Same columns as the former HTML page, plus Notes. */
     fun tastingsCsv(data: AppData, profileId: Long): String {
         val sb = StringBuilder(BOM)
-        sb.append("Producer;Wine;Country;Region;Wine style;Grapes;Tasting year;Score;Notes").append(EOL)
+        sb.append("Producer;Wine;Country;Region;Wine style;Grapes;Tasting year;Score;Notes;Vintage").append(EOL)
         data.tastings.filter { it.profileId == profileId }
             .mapNotNull { t -> data.wines[t.wineId]?.let { it to t } }
             .sortedWith(compareBy({ it.first.producer.lowercase() }, { it.first.name.lowercase() }, { it.second.year }))
             .forEach { (w, t) ->
                 sb.append(
-                    csvLine(w.producer, w.name, w.country, w.region, w.style, w.grapes, t.year, num(t.score), t.notes)
+                    csvLine(
+                        w.producer, w.name, w.country, w.region, w.style, w.grapes, t.year, num(t.score), t.notes,
+                        t.vintage ?: "",
+                    )
                 ).append(EOL)
             }
         return sb.toString()
@@ -301,7 +305,7 @@ object LedgerExport {
                     .put("produttore", w.producer).put("vino", w.name)
                     .put("paese", w.country).put("regione", w.region).put("tipologia", w.style)
                     .put("uve", JSONArray(grapesOf(w.grapes)))
-                    .put("anno", t.year).put("score", t.score)
+                    .put("anno", t.year).put("score", t.score).put("annata", t.vintage ?: "")
                     .put("inserito", java.time.Instant.ofEpochMilli(t.createdAt).toString().take(10))
             )
         }
@@ -383,7 +387,7 @@ object Backup {
                 a.put(
                     JSONObject().put("id", it.id).put("wineId", it.wineId).put("profileId", it.profileId)
                         .put("year", it.year).put("score", it.score).put("notes", it.notes)
-                        .putN("photo", it.photo).put("createdAt", it.createdAt)
+                        .putN("photo", it.photo).put("createdAt", it.createdAt).putN("vintage", it.vintage)
                 )
             }
         })
@@ -443,7 +447,7 @@ object Backup {
                 Tasting(
                     it.longOr("id", 0), it.longOr("wineId", 0), it.longOr("profileId", 0),
                     it.intOrNull("year") ?: 0, it.doubleOrNull("score") ?: 0.0, it.text("notes"),
-                    it.photo(), it.longOr("createdAt", 0),
+                    it.photo(), it.longOr("createdAt", 0), it.intOrNull("vintage"),
                 )
             },
             openings = list("openings").map {

@@ -91,6 +91,8 @@ data class Tasting(
     val notes: String = "",
     val photo: String? = null,
     val createdAt: Long = 0,
+    /** Year printed on the bottle, when known. Not the year of the tasting. */
+    val vintage: Int? = null,
 )
 
 /** History of opened bottles. Texts are copied so the log survives deletions. */

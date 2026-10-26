@@ -244,6 +244,16 @@ private fun WineGroupCard(g: WineGroup, vm: AppViewModel, expanded: Boolean, onT
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    if (g.vintages.isNotEmpty()) {
+                        Text(
+                            "Vintage " + g.vintages.joinToString(" · "),
+                            Modifier.padding(top = 2.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                         StyleLabel(g.wine.style)
                         Text(
@@ -286,14 +296,21 @@ private fun WineGroupCard(g: WineGroup, vm: AppViewModel, expanded: Boolean, onT
                             fontFamily = Fraunces,
                             style = MaterialTheme.typography.titleMedium,
                         )
-                        Text(
-                            t.notes,
-                            Modifier.weight(1f),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        Column(Modifier.weight(1f)) {
+                            if (t.vintage != null) {
+                                Text(
+                                    "Vintage ${t.vintage}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                )
+                            }
+                            Text(
+                                t.notes,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                         QuietButton("Edit", onClick = { vm.editTasting(t.id) })
                         QuietButton("Delete", onClick = { vm.deleteTasting(t.id) }, danger = true)
                     }

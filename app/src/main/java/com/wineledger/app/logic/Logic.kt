@@ -183,6 +183,7 @@ data class WineGroup(val wine: Wine, val tastings: List<Tasting>) {
     val count: Int get() = tastings.size
     val avg: Double get() = Math.round(tastings.map { it.score }.average() * 10) / 10.0
     val years: List<Int> get() = tastings.map { it.year }.sorted()
+    val vintages: List<Int> get() = tastings.mapNotNull { it.vintage }.distinct().sorted()
     val lastYear: Int get() = tastings.maxOfOrNull { it.year } ?: 0
 }
 
@@ -212,7 +213,7 @@ fun filterTastings(tastings: List<Tasting>, wines: Map<Long, Wine>, f: LedgerFil
         if (f.region.isNotEmpty() && w.region != f.region) return@filter false
         if (f.year != null && t.year != f.year) return@filter false
         if (f.minScore != null && t.score < f.minScore) return@filter false
-        matchesQuery(f.query, w.name, w.producer, w.country, w.region, w.style, w.grapes)
+        matchesQuery(f.query, w.name, w.producer, w.country, w.region, w.style, w.grapes, t.vintage?.toString())
     }
 
 enum class LedgerSort(val label: String) {

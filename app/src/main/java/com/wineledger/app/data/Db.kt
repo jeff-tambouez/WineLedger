@@ -9,6 +9,8 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Update
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -206,7 +208,7 @@ interface AppDao {
         WishlistItem::class,
         Invitation::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class AppDb : RoomDatabase() {
@@ -216,13 +218,20 @@ abstract class AppDb : RoomDatabase() {
         @Volatile
         private var instance: AppDb? = null
 
+        /** Tastings now remember the vintage of the bottle. */
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tastings ADD COLUMN vintage INTEGER")
+            }
+        }
+
         fun get(context: Context): AppDb =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     AppDb::class.java,
                     "wineledger.db",
-                ).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2).build().also { instance = it }
             }
     }
 }

@@ -53,7 +53,7 @@ Le reste (Room, Compose, ViewModel, import/export) peut demander quelques correc
 
 ## Données
 
-- Base Room `wineledger.db` (version 1), clés étrangères en cascade.
+- Base Room `wineledger.db` (version 2), clés étrangères en cascade. La v2 ajoute `tastings.vintage` (millésime de la bouteille, distinct de l'année de dégustation) ; migration 1→2 incluse.
 - Photos : une par vin, JPEG 1600 px plus miniature 360 px, stockées dans le stockage privé de l'application. Aucune permission requise.
 - Sauvegarde : ZIP contenant `backup.json` et `photos/`. La restauration remplace tout.
 

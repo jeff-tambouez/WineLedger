@@ -80,6 +80,7 @@ data class TastingDraft(
     val country: String = "",
     val region: String = "",
     val grapes: String = "",
+    val vintage: String = "",
     val year: String = currentYear().toString(),
     val score: String = "",
     val notes: String = "",
@@ -217,8 +218,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         newTasting(
             TastingDraft(
                 editId = t.id, producer = w.producer, name = w.name, style = w.style, country = w.country,
-                region = w.region, grapes = w.grapes, year = t.year.toString(),
-                score = fmtNumber(t.score), notes = t.notes, photo = t.photo ?: w.photo,
+                region = w.region, grapes = w.grapes, vintage = t.vintage?.toString().orEmpty(),
+                year = t.year.toString(), score = fmtNumber(t.score), notes = t.notes, photo = t.photo ?: w.photo,
             )
         )
     }
@@ -232,6 +233,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun tastingDraftFrom(g: GuideWine) = TastingDraft(
         producer = g.winery, name = g.name, style = g.style, country = "Italy", region = g.region,
+        vintage = g.vintage.takeIf { it.toIntOrNull() != null }.orEmpty(),
     )
 
     /** Tasting form for a bottle of the cellar that was just opened elsewhere. */
@@ -316,7 +318,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             id = draft.editId, profileId = resolveProfileId(),
             wine = WineInfo(draft.producer, draft.name, draft.style, draft.country, draft.region, draft.grapes),
             year = parseIntLoose(draft.year) ?: currentYear(), score = score,
-            notes = draft.notes, photo = draft.photo,
+            notes = draft.notes, photo = draft.photo, vintage = parseIntLoose(draft.vintage),
         )
         viewModelScope.launch {
             val saved = repo.saveTasting(input)
@@ -351,7 +353,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         newTasting(
             TastingDraft(
                 producer = w.producer, name = w.name, style = w.style, country = w.country,
-                region = w.region, grapes = w.grapes, photo = w.photo,
+                region = w.region, grapes = w.grapes, vintage = inv.vintage?.toString().orEmpty(),
+                photo = w.photo,
             )
         )
     }
