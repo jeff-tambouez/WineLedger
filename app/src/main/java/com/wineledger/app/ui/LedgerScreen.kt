@@ -43,6 +43,7 @@ import com.wineledger.app.logic.flagFor
 import com.wineledger.app.logic.fmtScore
 import com.wineledger.app.logic.groupTastings
 import com.wineledger.app.logic.pairRows
+import com.wineledger.app.logic.snapshotLine
 import com.wineledger.app.logic.sortGroups
 
 @Composable
@@ -307,9 +308,17 @@ private fun WineGroupCard(g: WineGroup, vm: AppViewModel, expanded: Boolean, onT
                                 t.notes,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 2,
+                                maxLines = 3,
                                 overflow = TextOverflow.Ellipsis,
                             )
+                            val bottleLine = snapshotLine(t.bottle)
+                            if (bottleLine.isNotEmpty()) {
+                                Text(
+                                    bottleLine,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                         QuietButton("Edit", onClick = { vm.editTasting(t.id) })
                         QuietButton("Delete", onClick = { vm.deleteTasting(t.id) }, danger = true)

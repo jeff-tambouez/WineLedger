@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.wineledger.app.data.AppData
 import com.wineledger.app.data.AppDb
 import com.wineledger.app.data.BottleInput
+import com.wineledger.app.data.BottleSnapshot
 import com.wineledger.app.data.Backup
 import com.wineledger.app.data.Guide
 import com.wineledger.app.data.GuideData
@@ -25,6 +26,7 @@ import com.wineledger.app.data.Undo
 import com.wineledger.app.data.WineInfo
 import com.wineledger.app.logic.currentYear
 import com.wineledger.app.logic.dateDigitsToIso
+import com.wineledger.app.logic.fmtExact
 import com.wineledger.app.logic.fmtNumber
 import com.wineledger.app.logic.guideKey
 import com.wineledger.app.logic.isoToDateDigits
@@ -81,11 +83,29 @@ data class TastingDraft(
     val region: String = "",
     val grapes: String = "",
     val vintage: String = "",
+    // what the bottle knew in the cellar, kept with the tasting
+    val format: Double? = null,
+    val price: String = "",
+    val readyFrom: String = "",
+    val drinkBy: String = "",
+    val supplier: String = "",
+    /** Digits typed by the person, DDMMYYYY. */
+    val purchaseDate: String = "",
+    val bottleOpen: Boolean = false,
     val year: String = currentYear().toString(),
     val score: String = "",
     val notes: String = "",
     val photo: String? = null,
 )
+
+/** Fills the bottle details of a tasting form from what the bottle knew. */
+private fun TastingDraft.withBottle(b: BottleSnapshot?): TastingDraft =
+    if (b == null) this else copy(
+        format = b.format, price = b.price?.let { fmtExact(it) }.orEmpty(),
+        readyFrom = b.readyFrom?.toString().orEmpty(), drinkBy = b.drinkBy?.toString().orEmpty(),
+        supplier = b.supplier.orEmpty(), purchaseDate = isoToDateDigits(b.purchaseDate.orEmpty()),
+        bottleOpen = true,
+    )
 
 sealed interface Screen {
     data object Main : Screen
@@ -203,7 +223,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 editId = b.id, producer = w.producer, name = w.name, style = w.style,
                 vintage = b.vintage?.toString().orEmpty(), quantity = b.quantity,
                 country = w.country, region = w.region, grapes = w.grapes, format = b.format,
-                price = b.price?.let { fmtNumber(it) }.orEmpty(),
+                price = b.price?.let { fmtExact(it) }.orEmpty(),
                 readyFrom = b.readyFrom?.toString().orEmpty(), drinkBy = b.drinkBy?.toString().orEmpty(),
                 supplier = b.supplier, purchaseDate = isoToDateDigits(b.purchaseDate), notes = b.notes,
                 photo = b.photo ?: w.photo, moreOpen = true,
@@ -220,7 +240,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 editId = t.id, producer = w.producer, name = w.name, style = w.style, country = w.country,
                 region = w.region, grapes = w.grapes, vintage = t.vintage?.toString().orEmpty(),
                 year = t.year.toString(), score = fmtNumber(t.score), notes = t.notes, photo = t.photo ?: w.photo,
-            )
+            ).withBottle(t.bottle)
         )
     }
 
@@ -319,6 +339,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             wine = WineInfo(draft.producer, draft.name, draft.style, draft.country, draft.region, draft.grapes),
             year = parseIntLoose(draft.year) ?: currentYear(), score = score,
             notes = draft.notes, photo = draft.photo, vintage = parseIntLoose(draft.vintage),
+            bottle = BottleSnapshot(
+                format = draft.format, price = parseDoubleLoose(draft.price),
+                readyFrom = parseIntLoose(draft.readyFrom), drinkBy = parseIntLoose(draft.drinkBy),
+                supplier = draft.supplier.trim().ifEmpty { null },
+                purchaseDate = dateDigitsToIso(draft.purchaseDate),
+            ).takeIf { it != BottleSnapshot() },
         )
         viewModelScope.launch {
             val saved = repo.saveTasting(input)
@@ -354,8 +380,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             TastingDraft(
                 producer = w.producer, name = w.name, style = w.style, country = w.country,
                 region = w.region, grapes = w.grapes, vintage = inv.vintage?.toString().orEmpty(),
-                photo = w.photo,
-            )
+                notes = inv.notes.orEmpty(), photo = w.photo,
+            ).withBottle(inv.bottle)
         )
     }
 

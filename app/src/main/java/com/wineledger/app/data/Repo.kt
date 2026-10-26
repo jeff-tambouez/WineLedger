@@ -60,6 +60,7 @@ data class TastingInput(
     val notes: String = "",
     val photo: String? = null,
     val vintage: Int? = null,
+    val bottle: BottleSnapshot? = null,
 )
 
 /** One person who drank an opened bottle; a null score means "rate it later". */
@@ -232,7 +233,7 @@ class Repo(private val db: AppDb, val photos: PhotoStore) {
      * Puts a "Tasting to complete" card in the ledger of every profile except [addedBy]
      * that has neither tasted the wine nor a card waiting for it. Returns the new card ids.
      */
-    private suspend fun queueBacklog(wine: Wine, vintage: Int?, addedBy: Long, now: Long): List<Long> {
+    private suspend fun queueBacklog(wine: Wine, bottle: Bottle, addedBy: Long, now: Long): List<Long> {
         if (addedBy == 0L) return emptyList()
         val ids = ArrayList<Long>()
         for (p in dao.allProfiles()) {
@@ -241,7 +242,8 @@ class Repo(private val db: AppDb, val photos: PhotoStore) {
             ids += dao.insertInvitation(
                 Invitation(
                     wineId = wine.id, profileId = p.id, fromProfileId = addedBy, year = currentYear(),
-                    vintage = vintage, stage = Invitation.STAGE_BACKLOG, createdAt = now,
+                    vintage = bottle.vintage, stage = Invitation.STAGE_BACKLOG, createdAt = now,
+                    notes = bottle.notes.ifBlank { null }, bottle = bottle.snapshot(),
                 )
             )
         }
@@ -308,15 +310,14 @@ class Repo(private val db: AppDb, val photos: PhotoStore) {
             val undo: Undo = { db.withTransaction { dao.updateBottle(same); dao.deleteOrphanWines() } }
             return@withTransaction Saved(same.id, undo)
         }
-        val id = dao.insertBottle(
-            Bottle(
-                wineId = wine.id, vintage = input.vintage, format = input.format, quantity = qty,
-                price = input.price, readyFrom = input.readyFrom, drinkBy = input.drinkBy,
-                supplier = input.supplier.trim(), purchaseDate = input.purchaseDate,
-                notes = input.notes.trim(), photo = input.photo, addedAt = now,
-            )
+        val bottle = Bottle(
+            wineId = wine.id, vintage = input.vintage, format = input.format, quantity = qty,
+            price = input.price, readyFrom = input.readyFrom, drinkBy = input.drinkBy,
+            supplier = input.supplier.trim(), purchaseDate = input.purchaseDate,
+            notes = input.notes.trim(), photo = input.photo, addedAt = now,
         )
-        val cards = queueBacklog(wine, input.vintage, input.addedBy, now)
+        val id = dao.insertBottle(bottle)
+        val cards = queueBacklog(wine, bottle, input.addedBy, now)
         val undo: Undo = {
             db.withTransaction {
                 dao.deleteBottle(id)
@@ -354,11 +355,14 @@ class Repo(private val db: AppDb, val photos: PhotoStore) {
             if (b.quantity > 1) dao.updateBottle(b.copy(quantity = b.quantity - 1)) else dao.deleteBottle(b.id)
 
             val scores = tasters.mapNotNull { it.score }
+            val snap = b.snapshot()
+            val bottleNotes = b.notes.ifBlank { null }
             val openingId = dao.insertOpening(
                 OpeningLog(
                     date = todayIso(), producer = wine.producer, wine = wine.name, vintage = b.vintage,
                     price = b.price,
                     score = if (scores.isEmpty()) null else Math.round(scores.average() * 10) / 10.0,
+                    notes = bottleNotes, bottle = snap,
                 )
             )
 
@@ -370,7 +374,8 @@ class Repo(private val db: AppDb, val photos: PhotoStore) {
                     tastingIds += dao.insertTasting(
                         Tasting(
                             wineId = wine.id, profileId = t.profileId, year = year,
-                            score = t.score, photo = b.photo, createdAt = now, vintage = b.vintage,
+                            score = t.score, notes = b.notes, photo = b.photo, createdAt = now,
+                            vintage = b.vintage, bottle = snap,
                         )
                     )
                     clearPending(wine.id, t.profileId, year)
@@ -379,11 +384,12 @@ class Repo(private val db: AppDb, val photos: PhotoStore) {
                         Invitation(
                             wineId = wine.id, profileId = t.profileId, fromProfileId = t.profileId,
                             year = year, vintage = b.vintage, stage = 1, createdAt = now,
+                            notes = bottleNotes, bottle = snap,
                         )
                     )
                 }
             }
-            if (b.photo != null && wine.photo == null && tasters.isNotEmpty()) {
+            if (b.photo != null && wine.photo == null) {
                 wineBefore = wine
                 dao.updateWine(wine.copy(photo = b.photo))
             }
@@ -397,6 +403,7 @@ class Repo(private val db: AppDb, val photos: PhotoStore) {
                         Invitation(
                             wineId = wine.id, profileId = p.id, fromProfileId = first,
                             year = year, vintage = b.vintage, stage = 0, createdAt = now,
+                            notes = bottleNotes, bottle = snap,
                         )
                     )
                 }
@@ -431,6 +438,7 @@ class Repo(private val db: AppDb, val photos: PhotoStore) {
                     old.copy(
                         wineId = wineId, year = input.year, score = input.score,
                         notes = input.notes.trim(), photo = input.photo, vintage = input.vintage,
+                        bottle = input.bottle,
                     )
                 )
                 dao.deleteOrphanWines()
@@ -443,6 +451,7 @@ class Repo(private val db: AppDb, val photos: PhotoStore) {
             Tasting(
                 wineId = wine.id, profileId = input.profileId, year = input.year, score = input.score,
                 notes = input.notes.trim(), photo = input.photo, createdAt = now, vintage = input.vintage,
+                bottle = input.bottle,
             )
         )
         released(input.photo)
@@ -489,7 +498,8 @@ class Repo(private val db: AppDb, val photos: PhotoStore) {
         val tastingId = dao.insertTasting(
             Tasting(
                 wineId = inv.wineId, profileId = inv.profileId, year = inv.year,
-                score = score, createdAt = System.currentTimeMillis(), vintage = inv.vintage,
+                score = score, notes = inv.notes.orEmpty(), createdAt = System.currentTimeMillis(),
+                vintage = inv.vintage, bottle = inv.bottle,
             )
         )
         dao.deleteInvitation(id)
@@ -561,7 +571,7 @@ class Repo(private val db: AppDb, val photos: PhotoStore) {
             dao.insertTasting(
                 Tasting(
                     wineId = wine.id, profileId = profileId, year = y, score = t.score,
-                    notes = t.notes, createdAt = now, vintage = t.vintage,
+                    notes = t.notes, createdAt = now, vintage = t.vintage, bottle = t.bottle,
                 )
             )
             tastings++
@@ -614,6 +624,7 @@ data class ImportedTasting(
     val score: Double,
     val notes: String = "",
     val vintage: Int? = null,
+    val bottle: BottleSnapshot? = null,
 )
 
 data class ImportedBottle(

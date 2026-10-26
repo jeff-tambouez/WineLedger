@@ -1,6 +1,7 @@
 package com.wineledger.app.logic
 
 import com.wineledger.app.data.Bottle
+import com.wineledger.app.data.BottleSnapshot
 import com.wineledger.app.data.OpeningLog
 import com.wineledger.app.data.Tasting
 import com.wineledger.app.data.Wine
@@ -43,6 +44,15 @@ fun isoToDateDigits(iso: String): String {
     val d = runCatching { LocalDate.parse(iso) }.getOrNull() ?: return ""
     return String.format(Locale.ROOT, "%02d%02d%04d", d.dayOfMonth, d.monthValue, d.year)
 }
+
+/** "2026-10-23" to "23/10/2026". Anything else is returned as it is. */
+fun displayDate(iso: String): String {
+    val d = isoToDateDigits(iso)
+    return if (d.length == 8) "${d.substring(0, 2)}/${d.substring(2, 4)}/${d.substring(4)}" else iso
+}
+
+/** Number as typed back into a field: no rounding, no trailing ".0". */
+fun fmtExact(d: Double): String = if (d % 1.0 == 0.0) d.toLong().toString() else d.toString()
 
 /** "23102026" to "2026-10-23". Null when the digits are incomplete or not a real date. */
 fun dateDigitsToIso(digits: String): String? {
@@ -178,6 +188,29 @@ fun windowLabel(b: Bottle, w: Window): String = when (w) {
 // =====================================================================
 // Ledger
 // =====================================================================
+
+/** One line with what the cellar knew about a tasted bottle: format, price, window, where and when bought. */
+fun snapshotLine(b: BottleSnapshot?): String {
+    if (b == null) return ""
+    val parts = ArrayList<String>()
+    b.format?.takeIf { it != 0.75 }?.let { parts += formatLabel(it) }
+    b.price?.let { parts += fmtMoney(it) }
+    val from = b.readyFrom
+    val by = b.drinkBy
+    when {
+        from != null && by != null -> parts += "Drink $from–$by"
+        from != null -> parts += "Drink from $from"
+        by != null -> parts += "Drink by $by"
+    }
+    val supplier = b.supplier?.takeIf { it.isNotBlank() }
+    val date = b.purchaseDate?.takeIf { it.isNotBlank() }?.let { displayDate(it) }
+    when {
+        supplier != null && date != null -> parts += "Bought from $supplier, $date"
+        supplier != null -> parts += "Bought from $supplier"
+        date != null -> parts += "Bought $date"
+    }
+    return parts.joinToString(" · ")
+}
 
 data class WineGroup(val wine: Wine, val tastings: List<Tasting>) {
     val count: Int get() = tastings.size

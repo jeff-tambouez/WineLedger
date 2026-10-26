@@ -1,5 +1,6 @@
 package com.wineledger.app.data
 
+import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -30,6 +31,25 @@ data class Wine(
     val grapes: String = "",
     /** File name inside the private photos folder, or null. */
     val photo: String? = null,
+)
+
+/**
+ * What the cellar knew about a bottle. Copied onto the tasting, the pending card and the opening log
+ * when the bottle leaves the cellar, so nothing is lost on the way to the ledger.
+ */
+data class BottleSnapshot(
+    val format: Double? = null,
+    val price: Double? = null,
+    val readyFrom: Int? = null,
+    val drinkBy: Int? = null,
+    val supplier: String? = null,
+    /** ISO date (yyyy-MM-dd). */
+    val purchaseDate: String? = null,
+)
+
+fun Bottle.snapshot() = BottleSnapshot(
+    format = format, price = price, readyFrom = readyFrom, drinkBy = drinkBy,
+    supplier = supplier.ifBlank { null }, purchaseDate = purchaseDate.ifBlank { null },
 )
 
 /** Physical bottles of one wine and vintage sitting in the shared cellar. */
@@ -93,6 +113,7 @@ data class Tasting(
     val createdAt: Long = 0,
     /** Year printed on the bottle, when known. Not the year of the tasting. */
     val vintage: Int? = null,
+    @Embedded(prefix = "b_") val bottle: BottleSnapshot? = null,
 )
 
 /** History of opened bottles. Texts are copied so the log survives deletions. */
@@ -106,6 +127,9 @@ data class OpeningLog(
     val vintage: Int? = null,
     val price: Double? = null,
     val score: Double? = null,
+    /** Notes the bottle had in the cellar. */
+    val notes: String? = null,
+    @Embedded(prefix = "b_") val bottle: BottleSnapshot? = null,
 )
 
 /** A Veronelli guide wine starred by a profile. */
@@ -160,6 +184,9 @@ data class Invitation(
     val vintage: Int? = null,
     val stage: Int = 0,
     val createdAt: Long = 0,
+    /** Notes the bottle had in the cellar, handed to the tasting when it is rated. */
+    val notes: String? = null,
+    @Embedded(prefix = "b_") val bottle: BottleSnapshot? = null,
 ) {
     companion object {
         const val STAGE_BACKLOG = 2

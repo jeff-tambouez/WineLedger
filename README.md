@@ -53,7 +53,8 @@ Le reste (Room, Compose, ViewModel, import/export) peut demander quelques correc
 
 ## Données
 
-- Base Room `wineledger.db` (version 2), clés étrangères en cascade. La v2 ajoute `tastings.vintage` (millésime de la bouteille, distinct de l'année de dégustation) ; migration 1→2 incluse.
+- Base Room `wineledger.db` (version 3), clés étrangères en cascade. La v2 ajoute `tastings.vintage` (millésime de la bouteille, distinct de l'année de dégustation) ; migrations 1→2 et 2→3 incluses.
+- Rien ne se perd entre la Cave et le Journal : à l'ouverture d'une bouteille, la dégustation reprend le millésime, les notes de la bouteille et un `BottleSnapshot` (format, prix, fenêtre de dégustation, fournisseur, date d'achat). Le même snapshot est copié sur les cartes en attente (`invitations`) et sur le journal des ouvertures (`openings`), et il est modifiable dans « Bottle details » du formulaire de dégustation. Il figure dans les exports CSV/JSON des dégustations et dans la sauvegarde ZIP.
 - Photos : une par vin, JPEG 1600 px plus miniature 360 px, stockées dans le stockage privé de l'application. Aucune permission requise.
 - Sauvegarde : ZIP contenant `backup.json` et `photos/`. La restauration remplace tout.
 

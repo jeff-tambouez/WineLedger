@@ -208,7 +208,7 @@ interface AppDao {
         WishlistItem::class,
         Invitation::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class AppDb : RoomDatabase() {
@@ -217,6 +217,22 @@ abstract class AppDb : RoomDatabase() {
     companion object {
         @Volatile
         private var instance: AppDb? = null
+
+        private const val SNAPSHOT_COLUMNS = "b_format REAL, b_price REAL, b_readyFrom INTEGER, " +
+            "b_drinkBy INTEGER, b_supplier TEXT, b_purchaseDate TEXT"
+
+        /** Tastings, pending cards and the opening log keep what the bottle knew. */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                for (table in listOf("tastings", "invitations", "openings")) {
+                    for (column in SNAPSHOT_COLUMNS.split(", ")) {
+                        db.execSQL("ALTER TABLE $table ADD COLUMN $column")
+                    }
+                }
+                db.execSQL("ALTER TABLE invitations ADD COLUMN notes TEXT")
+                db.execSQL("ALTER TABLE openings ADD COLUMN notes TEXT")
+            }
+        }
 
         /** Tastings now remember the vintage of the bottle. */
         private val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -231,7 +247,7 @@ abstract class AppDb : RoomDatabase() {
                     context.applicationContext,
                     AppDb::class.java,
                     "wineledger.db",
-                ).addMigrations(MIGRATION_1_2).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
             }
     }
 }

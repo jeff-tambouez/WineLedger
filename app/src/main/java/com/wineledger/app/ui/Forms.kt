@@ -386,7 +386,7 @@ fun TastingFormScreen(vm: AppViewModel, initial: TastingDraft, key: Any) {
 
     val editing = d.editId != 0L
     val ready = d.producer.isNotBlank() && d.name.isNotBlank() && d.style.isNotEmpty() &&
-        d.year.toIntOrNull() != null && validScore(d.score)
+        d.year.toIntOrNull() != null && validScore(d.score) && validDateDigits(d.purchaseDate)
 
     Column(
         Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
@@ -443,6 +443,37 @@ fun TastingFormScreen(vm: AppViewModel, initial: TastingDraft, key: Any) {
         }
         ScoreInput(d.score, { d = d.copy(score = it) })
         AppField(d.notes, { d = d.copy(notes = it) }, "Notes", singleLine = false)
+        QuietButton(
+            if (d.bottleOpen) "Hide bottle details" else "Bottle details",
+            onClick = { d = d.copy(bottleOpen = !d.bottleOpen) },
+        )
+        if (d.bottleOpen) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                DropdownField(
+                    "Format",
+                    d.format?.let { formatLabel(it) }.orEmpty(),
+                    FORMATS.map { formatLabel(it) },
+                    { label -> d = d.copy(format = FORMATS.firstOrNull { formatLabel(it) == label }) },
+                    emptyLabel = "Not set",
+                )
+                AppField(
+                    d.price, { d = d.copy(price = it.filter { c -> c.isDigit() || c == '.' || c == ',' }.take(8)) },
+                    "Price per bottle (€)", keyboard = KeyboardType.Decimal,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    AppField(
+                        d.readyFrom, { d = d.copy(readyFrom = it.filter { c -> c.isDigit() }.take(4)) },
+                        "Ready from (year)", Modifier.weight(1f), keyboard = KeyboardType.Number,
+                    )
+                    AppField(
+                        d.drinkBy, { d = d.copy(drinkBy = it.filter { c -> c.isDigit() }.take(4)) },
+                        "Drink by (year)", Modifier.weight(1f), keyboard = KeyboardType.Number,
+                    )
+                }
+                AppField(d.supplier, { d = d.copy(supplier = it) }, "Bought from")
+                DateField(d.purchaseDate, { d = d.copy(purchaseDate = it) }, "Purchase date")
+            }
+        }
         PhotoSection(d.photo, vm) { d = d.copy(photo = it) }
 
         if (!ready) {
