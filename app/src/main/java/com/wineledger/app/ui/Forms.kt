@@ -307,7 +307,7 @@ fun BottleFormScreen(vm: AppViewModel, initial: BottleDraft, key: Any) {
                     AppField(d.country, { d = d.copy(country = it) }, "Country", Modifier.weight(1f))
                     AppField(d.region, { d = d.copy(region = it) }, "Region", Modifier.weight(1f))
                 }
-                AppField(d.grapes, { d = d.copy(grapes = it) }, "Grapes (comma separated)")
+                GrapesEditor(d.grapes, { d = d.copy(grapes = it) }, data, vm)
                 AppField(d.notes, { d = d.copy(notes = it) }, "Notes", singleLine = false)
             }
         }
@@ -430,7 +430,7 @@ fun TastingFormScreen(vm: AppViewModel, initial: TastingDraft, key: Any) {
             AppField(d.country, { d = d.copy(country = it) }, "Country", Modifier.weight(1f))
             AppField(d.region, { d = d.copy(region = it) }, "Region", Modifier.weight(1f))
         }
-        AppField(d.grapes, { d = d.copy(grapes = it) }, "Grapes (comma separated)")
+        GrapesEditor(d.grapes, { d = d.copy(grapes = it) }, data, vm)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             AppField(
                 d.vintage, { d = d.copy(vintage = it.filter { c -> c.isDigit() }.take(4)) },

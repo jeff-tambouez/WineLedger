@@ -47,13 +47,20 @@ Le reste (Room, Compose, ViewModel, import/export) peut demander quelques correc
 - Ajouter une bouteille identique (même vin, millésime, format) additionne les quantités.
 - Les textes de l'interface sont en anglais, comme dans le cahier des charges.
 
+## Cépages
+
+- `logic/Grapes.kt` : base intégrée de ~150 cépages (rouges et blancs, avec leurs autres noms : Shiraz = Syrah, Garnacha = Grenache…), dont les plus utilisés en tête.
+- Un vin garde ses cépages dans `wines.grapes` sous forme de texte lisible, pourcentage optionnel par cépage : `Merlot 70%, Cabernet Franc 30%, Petit Verdot`.
+  Les anciennes listes (`Merlot, Syrah`) restent valides, les CSV/JSON/sauvegardes les reprennent tels quels, et les stats comptent les noms sans les pourcentages.
+- Formulaires Cave et Journal : « Add a grape » ouvre un sélecteur avec recherche ; si le cépage n'existe pas, « Add “…” as a new grape » l'enregistre (table `custom_grapes`, incluse dans la sauvegarde) et il est ensuite proposé pour tous les vins.
+
 ## Importer une liste de vins
 
 `tools/build_cellar_import.py` génère `tools/cellar_import.csv` (format de l'export Cave). Dans l'app : Réglages, Import, choisir ce fichier.
 
 ## Données
 
-- Base Room `wineledger.db` (version 3), clés étrangères en cascade. La v2 ajoute `tastings.vintage` (millésime de la bouteille, distinct de l'année de dégustation) ; migrations 1→2 et 2→3 incluses.
+- Base Room `wineledger.db` (version 4), clés étrangères en cascade. La v2 ajoute `tastings.vintage` (millésime de la bouteille, distinct de l'année de dégustation) ; migrations 1→2, 2→3 et 3→4 incluses.
 - Rien ne se perd entre la Cave et le Journal : à l'ouverture d'une bouteille, la dégustation reprend le millésime, les notes de la bouteille et un `BottleSnapshot` (format, prix, fenêtre de dégustation, fournisseur, date d'achat). Le même snapshot est copié sur les cartes en attente (`invitations`) et sur le journal des ouvertures (`openings`), et il est modifiable dans « Bottle details » du formulaire de dégustation. Il figure dans les exports CSV/JSON des dégustations et dans la sauvegarde ZIP.
 - Photos : une par vin, JPEG 1600 px plus miniature 360 px, stockées dans le stockage privé de l'application. Aucune permission requise.
 - Sauvegarde : ZIP contenant `backup.json` et `photos/`. La restauration remplace tout.

@@ -27,7 +27,7 @@ data class Wine(
     val country: String = "",
     val region: String = "",
     val style: String = "",
-    /** Grapes, comma separated. */
+    /** Grapes, comma separated, each with an optional percentage: "Merlot 70%, Cabernet Franc 30%". */
     val grapes: String = "",
     /** File name inside the private photos folder, or null. */
     val photo: String? = null,
@@ -131,6 +131,10 @@ data class OpeningLog(
     val notes: String? = null,
     @Embedded(prefix = "b_") val bottle: BottleSnapshot? = null,
 )
+
+/** A grape added by hand because the built-in grape database does not have it. */
+@Entity(tableName = "custom_grapes")
+data class CustomGrape(@PrimaryKey val name: String)
 
 /** A Veronelli guide wine starred by a profile. */
 @Entity(

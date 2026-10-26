@@ -414,6 +414,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Remembers a grape the built-in database does not have, so it is offered for every wine. */
+    fun addCustomGrape(name: String) {
+        viewModelScope.launch { repo.addCustomGrape(name) }
+    }
+
     fun updateProfile(p: Profile) {
         viewModelScope.launch { repo.updateProfile(p) }
     }

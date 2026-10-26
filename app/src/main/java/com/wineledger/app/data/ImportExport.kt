@@ -2,8 +2,9 @@ package com.wineledger.app.data
 
 import com.wineledger.app.logic.csvLine
 import com.wineledger.app.logic.detectDelimiter
-import com.wineledger.app.logic.grapesOf
-import com.wineledger.app.logic.joinGrapes
+import com.wineledger.app.logic.formatGrapeShare
+import com.wineledger.app.logic.normalizeGrapes
+import com.wineledger.app.logic.parseGrapeShares
 import com.wineledger.app.logic.normStyle
 import com.wineledger.app.logic.parseCsv
 import com.wineledger.app.logic.parseDoubleLoose
@@ -60,9 +61,9 @@ private fun grapesFrom(o: JSONObject, key: String): String {
     if (!o.has(key) || o.isNull(key)) return ""
     val v = o.get(key)
     return if (v is JSONArray) {
-        joinGrapes(grapesOf((0 until v.length()).joinToString(",") { v.get(it).toString() }))
+        normalizeGrapes((0 until v.length()).joinToString(",") { v.get(it).toString() })
     } else {
-        joinGrapes(grapesOf(v.toString()))
+        normalizeGrapes(v.toString())
     }
 }
 
@@ -236,7 +237,7 @@ object LedgerImport {
             if (p.isEmpty() || w.isEmpty()) return null
             return WineInfo(
                 p, w, normStyle(at(r, cStyle)), at(r, cCountry), at(r, cRegion),
-                joinGrapes(grapesOf(at(r, cGrapes))),
+                normalizeGrapes(at(r, cGrapes)),
             )
         }
 
@@ -342,7 +343,7 @@ object LedgerExport {
                     .put("id", "w${t.id}")
                     .put("produttore", w.producer).put("vino", w.name)
                     .put("paese", w.country).put("regione", w.region).put("tipologia", w.style)
-                    .put("uve", JSONArray(grapesOf(w.grapes)))
+                    .put("uve", JSONArray(parseGrapeShares(w.grapes).map { formatGrapeShare(it) }))
                     .put("anno", t.year).put("score", t.score).put("annata", t.vintage ?: "")
                     .put("note", t.notes)
                     .put("formato", t.bottle?.format?.let { num(it) } ?: "").put("prezzo", t.bottle?.price ?: "")
@@ -360,7 +361,7 @@ object LedgerExport {
                     .put("produttore", w.producer).put("vino", w.name)
                     .put("annata", b.vintage ?: "")
                     .put("paese", w.country).put("regione", w.region).put("tipologia", w.style)
-                    .put("uve", JSONArray(grapesOf(w.grapes)))
+                    .put("uve", JSONArray(parseGrapeShares(w.grapes).map { formatGrapeShare(it) }))
                     .put("formato", num(b.format)).put("quantita", b.quantity)
                     .put("posizione", "Storage")
                     .put("prezzo", b.price ?: "")
@@ -443,6 +444,7 @@ object Backup {
                 )
             }
         })
+        root.put("customGrapes", JSONArray().also { a -> s.customGrapes.forEach { a.put(it) } })
         root.put("wishlist", JSONArray().also { a ->
             s.wishlist.forEach { a.put(JSONObject().put("profileId", it.profileId).put("guideKey", it.guideKey)) }
         })
@@ -502,6 +504,9 @@ object Backup {
                 )
             },
             wishlist = list("wishlist").map { WishlistItem(it.longOr("profileId", 0), it.text("guideKey")) },
+            customGrapes = root.optJSONArray("customGrapes")
+                ?.let { a -> (0 until a.length()).map { a.get(it).toString().trim() }.filter { it.isNotEmpty() } }
+                .orEmpty(),
             invitations = list("invitations").map {
                 Invitation(
                     it.longOr("id", 0), it.longOr("wineId", 0), it.longOr("profileId", 0),

@@ -18,6 +18,8 @@ data class AppData(
     val openings: List<OpeningLog> = emptyList(),
     val wishlist: List<WishlistItem> = emptyList(),
     val invitations: List<Invitation> = emptyList(),
+    /** Names of the grapes added by hand. */
+    val customGrapes: List<String> = emptyList(),
     val loaded: Boolean = false,
 )
 
@@ -77,6 +79,7 @@ data class Snapshot(
     val openings: List<OpeningLog>,
     val wishlist: List<WishlistItem>,
     val invitations: List<Invitation>,
+    val customGrapes: List<String> = emptyList(),
 )
 
 class Repo(private val db: AppDb, val photos: PhotoStore) {
@@ -90,7 +93,8 @@ class Repo(private val db: AppDb, val photos: PhotoStore) {
     }
     private val part2 = combine(
         dao.observeTastings(), dao.observeOpenings(), dao.observeWishlist(), dao.observeInvitations(),
-    ) { t, o, w, i -> arrayOf<Any>(t, o, w, i) }
+        dao.observeCustomGrapes(),
+    ) { t, o, w, i, g -> arrayOf<Any>(t, o, w, i, g) }
 
     @Suppress("UNCHECKED_CAST")
     val data: Flow<AppData> = combine(part1, part2) { a, b ->
@@ -102,6 +106,7 @@ class Repo(private val db: AppDb, val photos: PhotoStore) {
             openings = b[1] as List<OpeningLog>,
             wishlist = b[2] as List<WishlistItem>,
             invitations = b[3] as List<Invitation>,
+            customGrapes = (b[4] as List<CustomGrape>).map { it.name },
             loaded = true,
         )
     }
@@ -520,6 +525,11 @@ class Repo(private val db: AppDb, val photos: PhotoStore) {
         if (on) dao.insertWish(WishlistItem(profileId, guideKey)) else dao.deleteWish(profileId, guideKey)
     }
 
+    suspend fun addCustomGrape(name: String) {
+        val n = name.trim()
+        if (n.isNotEmpty()) dao.insertCustomGrape(CustomGrape(n))
+    }
+
     suspend fun updateProfile(p: Profile) {
         dao.updateProfile(p.copy(name = p.name.trim().ifEmpty { "Profile" }))
     }
@@ -530,10 +540,11 @@ class Repo(private val db: AppDb, val photos: PhotoStore) {
 
     suspend fun snapshot(): Snapshot = Snapshot(
         dao.allProfiles(), dao.allWines(), dao.allBottles(), dao.allTastings(),
-        dao.allOpenings(), dao.allWishlist(), dao.allInvitations(),
+        dao.allOpenings(), dao.allWishlist(), dao.allInvitations(), dao.allCustomGrapes().map { it.name },
     )
 
     suspend fun replaceAll(s: Snapshot) = db.withTransaction {
+        dao.clearCustomGrapes()
         dao.clearInvitations()
         dao.clearWishlist()
         dao.clearOpenings()
@@ -548,6 +559,7 @@ class Repo(private val db: AppDb, val photos: PhotoStore) {
         dao.insertOpenings(s.openings)
         dao.insertWishes(s.wishlist)
         dao.insertInvitations(s.invitations)
+        dao.insertCustomGrapes(s.customGrapes.map { CustomGrape(it) })
     }
 
     /** Append imported records (from the former HTML page or a CSV), skipping exact duplicates. */

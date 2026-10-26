@@ -37,6 +37,9 @@ interface AppDao {
     @Query("SELECT * FROM invitations ORDER BY createdAt")
     fun observeInvitations(): Flow<List<Invitation>>
 
+    @Query("SELECT * FROM custom_grapes ORDER BY name")
+    fun observeCustomGrapes(): Flow<List<CustomGrape>>
+
     // ---- one-shot reads ----
     @Query("SELECT * FROM profiles ORDER BY id")
     suspend fun allProfiles(): List<Profile>
@@ -58,6 +61,9 @@ interface AppDao {
 
     @Query("SELECT * FROM invitations ORDER BY createdAt")
     suspend fun allInvitations(): List<Invitation>
+
+    @Query("SELECT * FROM custom_grapes ORDER BY name")
+    suspend fun allCustomGrapes(): List<CustomGrape>
 
     @Query("SELECT COUNT(*) FROM profiles")
     suspend fun profileCount(): Int
@@ -145,6 +151,9 @@ interface AppDao {
     @Query("DELETE FROM wishlist WHERE profileId = :profileId AND guideKey = :guideKey")
     suspend fun deleteWish(profileId: Long, guideKey: String)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertCustomGrape(g: CustomGrape)
+
     @Insert
     suspend fun insertInvitation(i: Invitation): Long
 
@@ -175,6 +184,12 @@ interface AppDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertInvitations(list: List<Invitation>)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertCustomGrapes(list: List<CustomGrape>)
+
+    @Query("DELETE FROM custom_grapes")
+    suspend fun clearCustomGrapes()
 
     @Query("DELETE FROM invitations")
     suspend fun clearInvitations()
@@ -207,8 +222,9 @@ interface AppDao {
         OpeningLog::class,
         WishlistItem::class,
         Invitation::class,
+        CustomGrape::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class AppDb : RoomDatabase() {
@@ -220,6 +236,13 @@ abstract class AppDb : RoomDatabase() {
 
         private const val SNAPSHOT_COLUMNS = "b_format REAL, b_price REAL, b_readyFrom INTEGER, " +
             "b_drinkBy INTEGER, b_supplier TEXT, b_purchaseDate TEXT"
+
+        /** The grapes added by hand live in their own table. */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS custom_grapes (name TEXT NOT NULL, PRIMARY KEY(name))")
+            }
+        }
 
         /** Tastings, pending cards and the opening log keep what the bottle knew. */
         private val MIGRATION_2_3 = object : Migration(2, 3) {
@@ -247,7 +270,7 @@ abstract class AppDb : RoomDatabase() {
                     context.applicationContext,
                     AppDb::class.java,
                     "wineledger.db",
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
             }
     }
 }

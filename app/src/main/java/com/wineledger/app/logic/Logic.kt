@@ -108,23 +108,6 @@ fun normStyle(s: String?): String {
     }
 }
 
-private val GRAPE_FIX = mapOf(
-    "cabernet souvignon" to "Cabernet Sauvignon",
-    "barbera d'asti" to "Barbera",
-    "barbera d'alba" to "Barbera",
-)
-
-fun grapesOf(s: String?): List<String> {
-    val out = ArrayList<String>()
-    s.orEmpty().split(',', ';').map { it.trim() }.filter { it.isNotEmpty() }.forEach { raw ->
-        val g = GRAPE_FIX[raw.lowercase(Locale.ROOT)] ?: raw
-        if (out.none { it.equals(g, ignoreCase = true) }) out.add(g)
-    }
-    return out
-}
-
-fun joinGrapes(list: List<String>): String = list.joinToString(", ")
-
 fun styleColorHex(style: String): Long = when (style) {
     "Red" -> 0xFF990044
     "White" -> 0xFFB8935A
