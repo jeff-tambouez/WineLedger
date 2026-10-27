@@ -40,9 +40,13 @@ Le reste (Room, Compose, ViewModel, import/export) peut demander quelques correc
 - L'import ajoute les lignes et ignore les doublons exacts.
 - Renommer un vin le modifie sur place.
 - Date d'achat : on tape les 8 chiffres (23102026), le champ affiche 23/10/2026 ; bouton « Today ». Stockée en ISO.
-- Backlog « Tasting to complete » : quand un profil ajoute une nouvelle bouteille, chaque autre profil qui n'a pas encore goûté ce vin
-  reçoit une carte en haut de son Journal (badge sur l'onglet) avec **Complete** (formulaire de dégustation prérempli) ou **Remove** (avec Undo).
-  Réutilise la table `invitations` (`stage = 2`), donc sans migration. Les imports CSV n'en créent pas.
+- Cartes en attente chez l'autre profil (table `invitations`, sans migration) :
+  - ouvrir une bouteille de la cave, ou ajouter une dégustation seul, crée « Did you also drink this bottle? » (Yes/No puis note, ou « Later ») chez l'autre profil,
+    sauf s'il a déjà goûté ce vin cette année-là ou a déjà une carte pour lui ;
+  - ajouter une bouteille en cave ne crée aucune carte ;
+  - l'ancienne carte « Tasting to complete » (stage 2) n'est plus créée ; si une sauvegarde en contient, elle s'affiche encore avec Complete / Remove.
+- Nouvelle dégustation : « Who tasted? » propose chaque profil ou Both. Avec Both, une note par profil ; une note laissée vide crée une carte « rating pending »
+  (stage 1) dans ce profil. Au moins une note est requise. Notes, photo, millésime et détails de bouteille sont communs. Modifier une dégustation reste individuel.
 - Photos : un appui sur une photo existante l'ouvre en grand (pincer pour zoomer, appui pour fermer).
 - Ajouter une bouteille identique (même vin, millésime, format) additionne les quantités.
 - Les textes de l'interface sont en anglais, comme dans le cahier des charges.

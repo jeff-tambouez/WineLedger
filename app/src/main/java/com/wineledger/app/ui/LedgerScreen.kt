@@ -407,7 +407,7 @@ private fun InvitationCard(inv: Invitation, data: AppData, vm: AppViewModel) {
                 wine.producer + when {
                     from == null || from.id == inv.profileId -> ""
                     inv.stage == Invitation.STAGE_BACKLOG -> " · added by ${from.name}"
-                    else -> " · opened by ${from.name}"
+                    else -> " · tasted by ${from.name}"
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

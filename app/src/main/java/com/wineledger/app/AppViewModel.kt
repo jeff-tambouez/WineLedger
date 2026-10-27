@@ -96,7 +96,13 @@ data class TastingDraft(
     val score: String = "",
     val notes: String = "",
     val photo: String? = null,
+    /** Who tasted: 0 = the active profile, [WHO_BOTH], or a profile id. Only for a new tasting. */
+    val who: Long = 0,
+    /** Score of the second profile when both tasted. [score] is the first profile's. */
+    val scoreB: String = "",
 )
+
+const val WHO_BOTH = -1L
 
 /** Fills the bottle details of a tasting form from what the bottle knew. */
 private fun TastingDraft.withBottle(b: BottleSnapshot?): TastingDraft =
@@ -290,7 +296,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             price = parseDoubleLoose(draft.price), readyFrom = parseIntLoose(draft.readyFrom),
             drinkBy = parseIntLoose(draft.drinkBy), supplier = draft.supplier,
             purchaseDate = dateDigitsToIso(draft.purchaseDate).orEmpty(), notes = draft.notes,
-            photo = draft.photo, addedBy = resolveProfileId(),
+            photo = draft.photo,
         )
         viewModelScope.launch {
             val saved = repo.saveBottle(input)
@@ -333,9 +339,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ------------------------------------------------------------------
 
     fun saveTasting(draft: TastingDraft, onSaved: () -> Unit) {
-        val score = parseDoubleLoose(draft.score) ?: return
+        val profiles = data.value.profiles.take(2)
+        val editing = draft.editId != 0L
+        val tasters: List<Taster> = when {
+            editing -> emptyList()
+            draft.who == WHO_BOTH -> profiles.mapIndexed { i, p ->
+                Taster(p.id, parseDoubleLoose(if (i == 0) draft.score else draft.scoreB))
+            }
+            else -> listOf(Taster(draft.who.takeIf { it > 0 } ?: resolveProfileId(), parseDoubleLoose(draft.score)))
+        }
+        val scored = tasters.firstOrNull { it.score != null }
+        val score = (if (tasters.size > 1) scored?.score else parseDoubleLoose(draft.score)) ?: return
         val input = TastingInput(
-            id = draft.editId, profileId = resolveProfileId(),
+            id = draft.editId, profileId = scored?.profileId ?: resolveProfileId(),
             wine = WineInfo(draft.producer, draft.name, draft.style, draft.country, draft.region, draft.grapes),
             year = parseIntLoose(draft.year) ?: currentYear(), score = score,
             notes = draft.notes, photo = draft.photo, vintage = parseIntLoose(draft.vintage),
@@ -345,11 +361,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 supplier = draft.supplier.trim().ifEmpty { null },
                 purchaseDate = dateDigitsToIso(draft.purchaseDate),
             ).takeIf { it != BottleSnapshot() },
+            tasters = tasters,
         )
         viewModelScope.launch {
             val saved = repo.saveTasting(input)
+            val pending = tasters.filter { it.score == null }
+                .mapNotNull { t -> profiles.firstOrNull { it.id == t.profileId }?.name }
+            val label = draft.name.trim()
             toast(
-                if (draft.editId != 0L) "Tasting updated" else "${draft.name.trim()} added to the ledger",
+                when {
+                    editing -> "Tasting updated"
+                    tasters.size > 1 && pending.isEmpty() -> "$label added for ${profiles.joinToString(" and ") { it.name }}"
+                    pending.isNotEmpty() -> "$label added, rating left for ${pending.joinToString(" and ")}"
+                    else -> "$label added to the ledger"
+                },
                 saved.undo,
             )
             _screen.value = Screen.Main
