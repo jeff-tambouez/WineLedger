@@ -47,6 +47,14 @@ Le reste (Room, Compose, ViewModel, import/export) peut demander quelques correc
 - Ajouter une bouteille identique (même vin, millésime, format) additionne les quantités.
 - Les textes de l'interface sont en anglais, comme dans le cahier des charges.
 
+## Stats millésimes et prix
+
+Deux blocs en bas de l'onglet Stats, communs aux deux profils : « Vintages on the table » et « What the bottles cost ».
+Ils comptent toutes les bouteilles : cave (une par unité) et déjà bues. Une bouteille bue à deux ne compte qu'une fois
+(par vin, année et millésime, le plus grand nombre de dégustations d'un seul profil). Les bouteilles ouvertes pas encore notées viennent du journal d'ouvertures.
+Prix d'une bouteille bue : celui qu'elle avait en cave, sinon celui du journal d'ouvertures. Tranches : moins de 15, 15 à 25, 25 à 40, 40 à 70, 70 à 100, 100 et plus (borne basse incluse), plus « No price ».
+Logique : `bottleMix` dans `logic/Logic.kt`.
+
 ## Cépages
 
 - `logic/Grapes.kt` : base intégrée de ~150 cépages (rouges et blancs, avec leurs autres noms : Shiraz = Syrah, Garnacha = Grenache…), dont les plus utilisés en tête.

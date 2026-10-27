@@ -624,6 +624,115 @@ fun computeStats(tastings: List<Tasting>, wines: Map<Long, Wine>): Stats? {
 }
 
 // =====================================================================
+// Bottle mix: vintages and prices of every bottle, cellar and ledger together
+// =====================================================================
+
+/** All the bottles the app knows about, in the cellar or already drunk, split by vintage and price. */
+data class BottleMix(
+    val total: Int,
+    val inCellar: Int,
+    val drunk: Int,
+    val byVintage: List<Counted>,
+    val byPrice: List<Counted>,
+)
+
+val PRICE_BANDS: List<Pair<String, ClosedFloatingPointRange<Double>>> = listOf(
+    "Under 15" to 0.0..14.999999,
+    "15 to 25" to 15.0..24.999999,
+    "25 to 40" to 25.0..39.999999,
+    "40 to 70" to 40.0..69.999999,
+    "70 to 100" to 70.0..99.999999,
+    "100 and over" to 100.0..Double.MAX_VALUE,
+)
+
+private const val NO_VINTAGE = "Unknown"
+private const val NO_PRICE = "No price"
+
+private class MixItem(val vintage: Int?, val price: Double?, val qty: Int, val cellar: Boolean)
+
+/**
+ * Counts one bottle per cellar unit, plus one per bottle drunk. A bottle shared by both profiles
+ * is counted once: for each wine, year and vintage the drunk count is the highest number of tastings
+ * any single profile recorded. Opened bottles that nobody has rated yet come from the opening log.
+ * The price of a drunk bottle is the one the bottle had in the cellar, or else the opening log's.
+ */
+fun bottleMix(
+    bottles: List<Bottle>,
+    tastings: List<Tasting>,
+    openings: List<OpeningLog>,
+    wines: Map<Long, Wine>,
+): BottleMix? {
+    val items = ArrayList<MixItem>()
+    bottles.filter { wines.containsKey(it.wineId) }.forEach {
+        items += MixItem(it.vintage, it.price?.takeIf { p -> p > 0 }, it.quantity.coerceAtLeast(1), true)
+    }
+
+    fun key(w: Wine) = wineKey(w.producer, w.name)
+    val openingsByWine = openings.groupBy { wineKey(it.producer, it.wine) }
+    fun openingPrice(w: Wine, vintage: Int?): Double? =
+        openingsByWine[key(w)].orEmpty()
+            .filter { vintage == null || it.vintage == vintage }
+            .mapNotNull { (it.price ?: it.bottle?.price)?.takeIf { p -> p > 0 } }.maxOrNull()
+
+    val drunkByKey = HashMap<Pair<String, Int?>, Int>()
+    tastings.filter { wines.containsKey(it.wineId) }.groupBy { it.wineId to it.year }.forEach { (id, _), list ->
+        val wine = wines.getValue(id)
+        val vintages = list.mapNotNull { it.vintage }.toSet()
+        fun perProfile(l: List<Tasting>) = l.groupBy { it.profileId }.values.maxOfOrNull { it.size } ?: 0
+        var counted = 0
+        for (v in vintages) {
+            val sub = list.filter { it.vintage == v }
+            val n = perProfile(sub)
+            val price = sub.mapNotNull { it.bottle?.price?.takeIf { p -> p > 0 } }.maxOrNull() ?: openingPrice(wine, v)
+            items += MixItem(v, price, n, false)
+            drunkByKey.merge(key(wine) to v, n, Int::plus)
+            counted += n
+        }
+        val rest = (perProfile(list) - counted).coerceAtLeast(0)
+        if (rest > 0) {
+            val price = list.mapNotNull { it.bottle?.price?.takeIf { p -> p > 0 } }.maxOrNull() ?: openingPrice(wine, null)
+            items += MixItem(null, price, rest, false)
+            drunkByKey.merge(key(wine) to null, rest, Int::plus)
+        }
+    }
+    // opened bottles that have fewer tastings than openings (rating left for later); tastings without
+    // a vintage can stand for an opening that has one
+    val spare = HashMap<String, Int>()
+    drunkByKey.forEach { (k, n) -> if (k.second == null) spare[k.first] = n }
+    openings.groupBy { wineKey(it.producer, it.wine) to it.vintage }.forEach { (k, list) ->
+        var extra = list.size - (if (k.second == null) 0 else drunkByKey[k] ?: 0)
+        if (k.second != null) {
+            val borrow = minOf(extra.coerceAtLeast(0), spare[k.first] ?: 0)
+            spare[k.first] = (spare[k.first] ?: 0) - borrow
+            extra -= borrow
+        } else {
+            val known = drunkByKey.filterKeys { it.first == k.first }.values.sum()
+            extra = list.size - known
+        }
+        if (extra > 0) {
+            list.sortedBy { it.date }.takeLast(extra).forEach {
+                items += MixItem(it.vintage, (it.price ?: it.bottle?.price)?.takeIf { p -> p > 0 }, 1, false)
+            }
+        }
+    }
+    if (items.isEmpty()) return null
+
+    fun mix(label: (MixItem) -> String, order: List<String>): List<Counted> =
+        items.groupBy(label).map { (l, v) -> Counted(l, v.sumOf { it.qty }, 0.0) }
+            .sortedBy { c -> order.indexOf(c.label).let { if (it < 0) Int.MAX_VALUE else it } }
+
+    val years = items.mapNotNull { it.vintage }.distinct().sortedDescending()
+    val byVintage = mix({ it.vintage?.toString() ?: NO_VINTAGE }, years.map { it.toString() } + NO_VINTAGE)
+    val byPrice = mix(
+        { i -> i.price?.let { p -> PRICE_BANDS.firstOrNull { p in it.second }?.first } ?: NO_PRICE },
+        PRICE_BANDS.map { it.first } + NO_PRICE,
+    )
+    val cellar = items.filter { it.cellar }.sumOf { it.qty }
+    val drunk = items.filter { !it.cellar }.sumOf { it.qty }
+    return BottleMix(cellar + drunk, cellar, drunk, byVintage, byPrice)
+}
+
+// =====================================================================
 // CSV
 // =====================================================================
 

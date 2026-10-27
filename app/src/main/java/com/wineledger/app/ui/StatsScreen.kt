@@ -24,6 +24,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.wineledger.app.AppViewModel
 import com.wineledger.app.activeProfile
+import androidx.compose.foundation.lazy.LazyListScope
+import com.wineledger.app.logic.BottleMix
+import com.wineledger.app.logic.bottleMix
 import com.wineledger.app.logic.computeStats
 import com.wineledger.app.logic.flagFor
 import com.wineledger.app.logic.fmtScore
@@ -37,6 +40,11 @@ fun StatsScreen(vm: AppViewModel) {
     val profile = data.activeProfile(activeId)
     val stats = remember(data.tastings, data.wines, profile?.id) {
         computeStats(data.tastings.filter { it.profileId == profile?.id }, data.wines)
+    }
+
+    // every bottle of the app, cellar and ledger, both profiles
+    val mix = remember(data.bottles, data.tastings, data.openings, data.wines) {
+        bottleMix(data.bottles, data.tastings, data.openings, data.wines)
     }
 
     LazyColumn(
@@ -60,6 +68,7 @@ fun StatsScreen(vm: AppViewModel) {
                     "The statistics take shape as the ledger fills up. A handful of tastings is enough to see the first trends.",
                 )
             }
+            mixBlocks(mix)
             return@LazyColumn
         }
 
@@ -163,6 +172,7 @@ fun StatsScreen(vm: AppViewModel) {
                 }
             }
         }
+        mixBlocks(mix)
     }
 }
 
@@ -178,6 +188,27 @@ private fun ChartBlock(title: String, sub: String, content: @Composable () -> Un
             )
             Spacer(Modifier.height(12.dp))
             content()
+        }
+    }
+}
+
+/** Vintage and price spread of every bottle the app knows, in the cellar or already drunk. */
+private fun LazyListScope.mixBlocks(mix: BottleMix?) {
+    if (mix == null) return
+    item {
+        ChartBlock(
+            "Vintages on the table",
+            "${mix.total} bottles: ${mix.inCellar} in the cellar, ${mix.drunk} drunk. Both profiles.",
+        ) {
+            BarList(mix.byVintage, wl.gold, showAverage = false)
+        }
+    }
+    item {
+        ChartBlock(
+            "What the bottles cost",
+            "Bottles by price, in euros. Lower bound included. Both profiles.",
+        ) {
+            BarList(mix.byPrice, MaterialTheme.colorScheme.primary, showAverage = false)
         }
     }
 }
