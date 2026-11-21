@@ -3,7 +3,7 @@
 Application Android de carnet de dégustation et de cave à vin, pour Jeff et Vanessa.
 Kotlin, Jetpack Compose, Material 3, Room, Coil. Cible : Samsung Galaxy S25, Android 15.
 
-100 % local : aucune permission INTERNET, aucun compte. Les données restent sur le téléphone.
+100 % local : aucune permission INTERNET, aucun compte. Seule la sauvegarde Android copie la base dans le compte Google (voir « Sauvegardes automatiques »).
 
 ## Compiler et installer
 
@@ -12,8 +12,20 @@ Prérequis : Android Studio (Ladybug ou plus récent) avec le JDK 17 fourni, SDK
 1. Ouvrir le dossier `WineLedger` dans Android Studio et laisser la synchronisation Gradle se terminer (wrapper Gradle 8.9).
 2. Brancher le téléphone (débogage USB activé) puis lancer la configuration `app`.
 3. Pour obtenir un APK à installer directement : `./gradlew assembleRelease`.
-   Le build release est signé avec la clé de debug (voir `app/build.gradle.kts`) afin que l'APK soit installable sans keystore.
    Résultat : `app/build/outputs/apk/release/app-release.apk`.
+
+### Clé de signature : à faire une fois, avant tout
+
+Android refuse de mettre à jour une app signée avec une autre clé, et la seule issue est alors de la désinstaller, **ce qui efface toute la cave**.
+Sans réglage, chaque ordinateur signe avec sa propre clé de debug : compiler sur un autre PC suffit à tomber dans ce piège.
+
+1. Sur l'ordinateur qui a compilé l'app installée sur le téléphone, copier sa clé de debug en lieu sûr (et en garder une copie ailleurs : clé USB, Drive) :
+   `~/.android/debug.keystore` (Windows : `C:\Users\<toi>\.android\debug.keystore`).
+2. Copier `keystore.properties.example` en `keystore.properties` à la racine du projet et y mettre le chemin de ce fichier.
+   `keystore.properties`, `*.jks` et `*.keystore` sont ignorés par git.
+3. Tous les builds (debug et release) utilisent alors cette clé, sur n'importe quel ordinateur. Sans `keystore.properties`, on retombe sur la clé de debug locale, comme avant.
+
+Ne jamais utiliser une **nouvelle** clé pour l'app déjà installée : ce serait justement une signature différente.
 
 Paramètres : `applicationId com.wineledger.app`, `minSdk 34`, `compileSdk 35`.
 
@@ -77,6 +89,16 @@ Logique : `bottleMix` dans `logic/Logic.kt`.
 - `data/DbRescue.kt` : copie `wineledger.db` et ses fichiers `-wal`/`-shm` dans un ZIP **sans passer par Room**, donc même quand la base ne s'ouvre plus. Bouton dans l'écran d'erreur et dans Réglages > Database.
 - `tools/db_to_backup.py` : reconstruit un `backup.zip` restaurable depuis une base récupérée (le ZIP du bouton de secours, un `.db`, ou un dossier). Lit les bases v1 à v4, rejoue le journal `-wal`. Les photos étant des fichiers et non des lignes, elles ne sont pas dans une copie de base : `--photos <dossier>` les remet.
 - Jamais de `fallbackToDestructiveMigration` : une migration qui échoue doit remonter l'erreur, pas effacer la cave.
+
+## Sauvegardes automatiques
+
+- **Sauvegarde Android** (`android:allowBackup="true"`, `res/xml/data_extraction_rules.xml`) : copie quotidienne de la base et des préférences dans le compte Google, restaurée quand l'app est réinstallée.
+  Les photos n'y sont pas, car Google abandonne toute la sauvegarde d'une app au-delà de 25 Mo. Le transfert vers un nouveau téléphone, lui, prend tout, photos comprises.
+  La restauration exige la même clé de signature (voir plus haut).
+- **ZIP hebdomadaire** (`data/AutoBackup.kt`) : Réglages > Automatic backup > « Choose a folder » (idéalement Google Drive ou une carte SD).
+  À l'ouverture de l'app, si la dernière copie a plus de 7 jours, la sauvegarde complète (base + photos, le même ZIP que « Save a full backup ») y est écrite sous le nom `wine-ledger-auto-AAAA-MM-JJ-HHMM.zip`. Les 5 plus récentes sont gardées ; les autres fichiers du dossier ne sont jamais touchés.
+  Aucune copie n'est faite si la base est en erreur ou vide, pour ne jamais remplacer de bonnes copies par une mauvaise.
+- Réglages > Backup affiche « Last backup: … », en rouge au-delà de 14 jours sans sauvegarde.
 
 ## Données
 
