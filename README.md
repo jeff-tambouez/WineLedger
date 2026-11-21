@@ -75,6 +75,7 @@ Logique : `bottleMix` dans `logic/Logic.kt`.
 - `CrashLog.kt` : un gestionnaire d'exceptions non rattrapées écrit la dernière erreur dans `last-crash.txt` (stockage privé). Au démarrage suivant, `ui/TroubleScreen.kt` l'affiche au lieu de l'app, avec la trace complète sélectionnable et un bouton pour l'exporter en `.txt`.
 - Une erreur de base n'arrête plus l'app : le flux `Repo.data` est protégé par `catch`, et `ensureDefaults`/`cleanup` par `runCatching`. L'erreur devient un écran lisible, pas une fermeture.
 - `data/DbRescue.kt` : copie `wineledger.db` et ses fichiers `-wal`/`-shm` dans un ZIP **sans passer par Room**, donc même quand la base ne s'ouvre plus. Bouton dans l'écran d'erreur et dans Réglages > Database.
+- `tools/db_to_backup.py` : reconstruit un `backup.zip` restaurable depuis une base récupérée (le ZIP du bouton de secours, un `.db`, ou un dossier). Lit les bases v1 à v4, rejoue le journal `-wal`. Les photos étant des fichiers et non des lignes, elles ne sont pas dans une copie de base : `--photos <dossier>` les remet.
 - Jamais de `fallbackToDestructiveMigration` : une migration qui échoue doit remonter l'erreur, pas effacer la cave.
 
 ## Données
