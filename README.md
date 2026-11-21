@@ -58,6 +58,13 @@ Le reste (Room, Compose, ViewModel, import/export) peut demander quelques correc
 
 `tools/build_cellar_import.py` génère `tools/cellar_import.csv` (format de l'export Cave). Dans l'app : Réglages, Import, choisir ce fichier.
 
+## Quand ça casse
+
+- `CrashLog.kt` : un gestionnaire d'exceptions non rattrapées écrit la dernière erreur dans `last-crash.txt` (stockage privé). Au démarrage suivant, `ui/TroubleScreen.kt` l'affiche au lieu de l'app, avec la trace complète sélectionnable et un bouton pour l'exporter en `.txt`.
+- Une erreur de base n'arrête plus l'app : le flux `Repo.data` est protégé par `catch`, et `ensureDefaults`/`cleanup` par `runCatching`. L'erreur devient un écran lisible, pas une fermeture.
+- `data/DbRescue.kt` : copie `wineledger.db` et ses fichiers `-wal`/`-shm` dans un ZIP **sans passer par Room**, donc même quand la base ne s'ouvre plus. Bouton dans l'écran d'erreur et dans Réglages > Database.
+- Jamais de `fallbackToDestructiveMigration` : une migration qui échoue doit remonter l'erreur, pas effacer la cave.
+
 ## Données
 
 - Base Room `wineledger.db` (version 4), clés étrangères en cascade. La v2 ajoute `tastings.vintage` (millésime de la bouteille, distinct de l'année de dégustation) ; migrations 1→2, 2→3 et 3→4 incluses.

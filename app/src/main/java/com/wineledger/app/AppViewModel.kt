@@ -11,6 +11,7 @@ import com.wineledger.app.data.AppDb
 import com.wineledger.app.data.BottleInput
 import com.wineledger.app.data.BottleSnapshot
 import com.wineledger.app.data.Backup
+import com.wineledger.app.data.DbRescue
 import com.wineledger.app.data.Guide
 import com.wineledger.app.data.GuideData
 import com.wineledger.app.data.ImportException
@@ -42,6 +43,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -122,13 +124,34 @@ enum class ExportKind(val fileName: String, val mime: String) {
     CELLAR_CSV("cellar.csv", "text/csv"),
     LEDGER_JSON("ledger.json", "application/json"),
     BACKUP_ZIP("backup.zip", "application/zip"),
+    /** The raw database files, copied without going through Room. */
+    DATABASE_ZIP("database.zip", "application/zip"),
+    CRASH_TXT("crash.txt", "text/plain"),
 }
+
+/**
+ * Something went wrong that the person should see instead of a closing app:
+ * the previous run crashed, or the database cannot be read.
+ */
+data class Trouble(val title: String, val detail: String, val fromCrash: Boolean)
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("wineledger", Context.MODE_PRIVATE)
     private val repo = Repo(AppDb.get(app), PhotoStore(app))
 
-    val data: StateFlow<AppData> = repo.data.stateIn(viewModelScope, SharingStarted.Eagerly, AppData())
+    private val _trouble = MutableStateFlow<Trouble?>(null)
+    val trouble: StateFlow<Trouble?> = _trouble.asStateFlow()
+
+    /**
+     * A database error reaches us as a failed flow. Report it and carry on with empty data
+     * rather than letting the exception close the app: the person can still rescue the file.
+     */
+    val data: StateFlow<AppData> = repo.data
+        .catch { e ->
+            reportTrouble("The wine database could not be read", e)
+            emit(AppData(loaded = true))
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, AppData())
 
     private val _guide = MutableStateFlow(Guide.EMPTY)
     val guide: StateFlow<Guide> = _guide.asStateFlow()
@@ -157,14 +180,38 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch {
-            repo.ensureDefaults()
-            repo.cleanup()
+            runCatching {
+                repo.ensureDefaults()
+                repo.cleanup()
+            }.onFailure { reportTrouble("The wine database could not be opened", it) }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            CrashLog.read(getApplication())?.let { report ->
+                reportTrouble(Trouble("Wine Ledger closed unexpectedly", report, fromCrash = true))
+            }
         }
         viewModelScope.launch(Dispatchers.IO) {
             val g = runCatching { GuideData.load(getApplication()) }.getOrDefault(Guide.EMPTY)
             _guide.value = g
         }
     }
+
+    /** Keeps the first problem: it is the one closest to the cause. */
+    private fun reportTrouble(t: Trouble) {
+        if (_trouble.value == null) _trouble.value = t
+    }
+
+    private fun reportTrouble(title: String, error: Throwable) {
+        reportTrouble(Trouble(title, CrashLog.describe(error), fromCrash = false))
+    }
+
+    /** The person read the report: forget it so it does not come back at every start. */
+    fun dismissTrouble() {
+        CrashLog.clear(getApplication())
+        _trouble.value = null
+    }
+
+    fun databaseFiles(): String = DbRescue.describe(getApplication())
 
     private fun toast(message: String, undo: Undo? = null) {
         _toasts.tryEmit(Toast(message, undo))
@@ -450,6 +497,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                             ExportKind.CELLAR_CSV -> out.write(LedgerExport.cellarCsv(d).toByteArray(Charsets.UTF_8))
                             ExportKind.LEDGER_JSON -> out.write(LedgerExport.ledgerJson(d, pid).toByteArray(Charsets.UTF_8))
                             ExportKind.BACKUP_ZIP -> Backup.write(out, repo.snapshot(), repo.photos)
+                            ExportKind.DATABASE_ZIP -> DbRescue.writeZip(getApplication(), out)
+                            ExportKind.CRASH_TXT ->
+                                out.write(
+                                    (_trouble.value?.detail ?: "No report.").toByteArray(Charsets.UTF_8)
+                                )
                         }
                     }
                 }

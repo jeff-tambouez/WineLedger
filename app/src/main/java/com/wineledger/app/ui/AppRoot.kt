@@ -79,8 +79,9 @@ fun AppRoot(vm: AppViewModel) {
 
     BackHandler(enabled = screen !is Screen.Main) { vm.back() }
 
+    val trouble by vm.trouble.collectAsStateWithLifecycle()
     val profile = data.activeProfile(activeId)
-    val onMain = screen is Screen.Main
+    val onMain = screen is Screen.Main && trouble == null
     // cards waiting in the active profile's ledger (backlog and "did you also drink this?")
     val pending = data.invitations.count { it.profileId == profile?.id }
 
@@ -88,16 +89,18 @@ fun AppRoot(vm: AppViewModel) {
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            Box(Modifier.statusBarsPadding()) {
-                ProfileBar(
-                    profiles = data.profiles,
-                    activeId = profile?.id ?: -1L,
-                    both = both && onMain && tab == Tab.LEDGER,
-                    showBoth = onMain && tab == Tab.LEDGER,
-                    onSelect = { vm.selectProfile(it) },
-                    onBoth = { vm.selectBoth() },
-                    onSettings = { vm.openSettings() },
-                )
+            if (trouble == null) {
+                Box(Modifier.statusBarsPadding()) {
+                    ProfileBar(
+                        profiles = data.profiles,
+                        activeId = profile?.id ?: -1L,
+                        both = both && onMain && tab == Tab.LEDGER,
+                        showBoth = onMain && tab == Tab.LEDGER,
+                        onSelect = { vm.selectProfile(it) },
+                        onBoth = { vm.selectBoth() },
+                        onSettings = { vm.openSettings() },
+                    )
+                }
             }
         },
         bottomBar = {
@@ -145,7 +148,10 @@ fun AppRoot(vm: AppViewModel) {
         },
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
-            when (val s = screen) {
+            val broken = trouble
+            if (broken != null) {
+                TroubleScreen(vm, broken)
+            } else when (val s = screen) {
                 Screen.Main -> when (tab) {
                     Tab.LEDGER -> LedgerScreen(vm)
                     Tab.CELLAR -> CellarScreen(vm)

@@ -65,6 +65,9 @@ fun SettingsScreen(vm: AppViewModel) {
     val exportZip = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         if (uri != null) vm.export(ExportKind.BACKUP_ZIP, uri)
     }
+    val exportDb = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        if (uri != null) vm.export(ExportKind.DATABASE_ZIP, uri)
+    }
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) vm.importFile(uri)
     }
@@ -133,6 +136,17 @@ fun SettingsScreen(vm: AppViewModel) {
             GhostButton("Restore a backup", { confirmRestore = true }, Modifier.fillMaxWidth())
         }
 
+        Section("Database") {
+            Text(
+                "A copy of the raw database files, as a safety net: it is made without opening them, " +
+                    "so it also works when the app can no longer read them. The full backup above is the one to " +
+                    "use for a normal restore.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            GhostButton("Save a copy of the database", { exportDb.launch(stamp("database", "zip")) }, Modifier.fillMaxWidth())
+        }
+
         Section("About") {
             Text(
                 "Wine Ledger 1.0. Everything stays on this phone: the app has no network permission and no account.",
@@ -160,7 +174,7 @@ fun SettingsScreen(vm: AppViewModel) {
 }
 
 @Composable
-private fun Section(title: String, content: @Composable () -> Unit) {
+fun Section(title: String, content: @Composable () -> Unit) {
     SoftCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
