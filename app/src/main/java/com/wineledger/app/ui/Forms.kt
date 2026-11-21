@@ -41,6 +41,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.wineledger.app.AppViewModel
 import com.wineledger.app.BottleDraft
 import com.wineledger.app.TastingDraft
+import com.wineledger.app.WHO_BOTH
 import com.wineledger.app.activeProfile
 import com.wineledger.app.data.AppData
 import com.wineledger.app.data.Guide
@@ -385,8 +386,16 @@ fun TastingFormScreen(vm: AppViewModel, initial: TastingDraft, key: Any) {
     DiscardPhotoOnLeave(key, d.photo, vm, saved)
 
     val editing = d.editId != 0L
+    val people = data.profiles.take(2)
+    val both = !editing && d.who == WHO_BOTH && people.size == 2
+    // alone: one score. Both: at least one score; an empty one leaves that rating pending
+    val scoreOk = if (both) {
+        (validScore(d.score) || validScore(d.scoreB)) &&
+            (d.score.isBlank() || validScore(d.score)) && (d.scoreB.isBlank() || validScore(d.scoreB))
+    } else validScore(d.score)
     val ready = d.producer.isNotBlank() && d.name.isNotBlank() && d.style.isNotEmpty() &&
-        d.year.toIntOrNull() != null && validScore(d.score) && validDateDigits(d.purchaseDate)
+        d.year.toIntOrNull() != null && scoreOk && validDateDigits(d.purchaseDate)
+    val taster = people.firstOrNull { it.id == d.who } ?: profile
 
     Column(
         Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
@@ -394,9 +403,25 @@ fun TastingFormScreen(vm: AppViewModel, initial: TastingDraft, key: Any) {
     ) {
         FormHeader(
             if (editing) "Edit tasting" else "Record a tasting",
-            if (profile != null) "For ${profile.name}" else null,
+            when {
+                both -> "For ${people.joinToString(" and ") { it.name }}"
+                editing -> profile?.let { "For ${it.name}" }
+                else -> taster?.let { "For ${it.name}" }
+            },
             onClose = { vm.back() },
         )
+        if (!editing && people.size == 2) {
+            Text("Who tasted?", style = MaterialTheme.typography.labelLarge)
+            ChoiceChips(
+                people.map { it.name } + "Both",
+                if (both) "Both" else taster?.name.orEmpty(),
+                { label ->
+                    d = d.copy(
+                        who = if (label == "Both") WHO_BOTH else people.first { it.name == label }.id,
+                    )
+                },
+            )
+        }
 
         val knownProducer = suggestions.any { norm(it.producer) == norm(d.producer) } && d.producer.isNotBlank()
         SuggestField(
@@ -441,7 +466,17 @@ fun TastingFormScreen(vm: AppViewModel, initial: TastingDraft, key: Any) {
                 "Tasting year", Modifier.weight(1f), keyboard = KeyboardType.Number,
             )
         }
-        ScoreInput(d.score, { d = d.copy(score = it) })
+        if (both) {
+            ScoreInput(d.score, { d = d.copy(score = it) }, label = "${people[0].name} score /100")
+            ScoreInput(d.scoreB, { d = d.copy(scoreB = it) }, label = "${people[1].name} score /100")
+            Text(
+                "Leave a score empty to rate it later. A card will wait in that profile.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            ScoreInput(d.score, { d = d.copy(score = it) })
+        }
         AppField(d.notes, { d = d.copy(notes = it) }, "Notes", singleLine = false)
         QuietButton(
             if (d.bottleOpen) "Hide bottle details" else "Bottle details",
@@ -478,7 +513,8 @@ fun TastingFormScreen(vm: AppViewModel, initial: TastingDraft, key: Any) {
 
         if (!ready) {
             Text(
-                "Producer, wine, style, year and a score between 0 and 100 are needed.",
+                if (both) "Producer, wine, style, year and at least one score between 0 and 100 are needed."
+                else "Producer, wine, style, year and a score between 0 and 100 are needed.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -751,7 +751,13 @@ fun PhotoViewer(file: File, onDismiss: () -> Unit) {
 // =====================================================================
 
 @Composable
-fun BarList(items: List<Counted>, color: Color, modifier: Modifier = Modifier, labelPrefix: (String) -> String = { it }) {
+fun BarList(
+    items: List<Counted>,
+    color: Color,
+    modifier: Modifier = Modifier,
+    labelPrefix: (String) -> String = { it },
+    showAverage: Boolean = true,
+) {
     val max = (items.maxOfOrNull { it.count } ?: 1).coerceAtLeast(1)
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items.forEach { c ->
@@ -773,8 +779,8 @@ fun BarList(items: List<Counted>, color: Color, modifier: Modifier = Modifier, l
                     )
                 }
                 Text(
-                    "${c.count} · ${fmtScore(c.avg)}",
-                    Modifier.width(72.dp),
+                    if (showAverage) "${c.count} · ${fmtScore(c.avg)}" else c.count.toString(),
+                    Modifier.width(if (showAverage) 72.dp else 40.dp),
                     textAlign = TextAlign.End,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

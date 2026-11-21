@@ -49,8 +49,6 @@ data class BottleInput(
     val purchaseDate: String = "",
     val notes: String = "",
     val photo: String? = null,
-    /** Profile adding the bottle; the other profiles get a "Tasting to complete" card. 0 = nobody. */
-    val addedBy: Long = 0,
 )
 
 data class TastingInput(
@@ -63,6 +61,11 @@ data class TastingInput(
     val photo: String? = null,
     val vintage: Int? = null,
     val bottle: BottleSnapshot? = null,
+    /**
+     * Who drank the bottle, for a new tasting. Empty means just [profileId] with [score].
+     * A null score means "rate it later".
+     */
+    val tasters: List<Taster> = emptyList(),
 )
 
 /** One person who drank an opened bottle; a null score means "rate it later". */
@@ -234,27 +237,6 @@ class Repo(private val db: AppDb, val photos: PhotoStore) {
         return cleared
     }
 
-    /**
-     * Puts a "Tasting to complete" card in the ledger of every profile except [addedBy]
-     * that has neither tasted the wine nor a card waiting for it. Returns the new card ids.
-     */
-    private suspend fun queueBacklog(wine: Wine, bottle: Bottle, addedBy: Long, now: Long): List<Long> {
-        if (addedBy == 0L) return emptyList()
-        val ids = ArrayList<Long>()
-        for (p in dao.allProfiles()) {
-            if (p.id == addedBy) continue
-            if (dao.tastingCount(wine.id, p.id) > 0 || dao.invitationsFor(wine.id, p.id).isNotEmpty()) continue
-            ids += dao.insertInvitation(
-                Invitation(
-                    wineId = wine.id, profileId = p.id, fromProfileId = addedBy, year = currentYear(),
-                    vintage = bottle.vintage, stage = Invitation.STAGE_BACKLOG, createdAt = now,
-                    notes = bottle.notes.ifBlank { null }, bottle = bottle.snapshot(),
-                )
-            )
-        }
-        return ids
-    }
-
     /** Removes a card from the backlog without rating it. */
     suspend fun backlogDismiss(id: Long): Undo? = db.withTransaction {
         val inv = dao.invitation(id) ?: return@withTransaction null
@@ -322,11 +304,9 @@ class Repo(private val db: AppDb, val photos: PhotoStore) {
             notes = input.notes.trim(), photo = input.photo, addedAt = now,
         )
         val id = dao.insertBottle(bottle)
-        val cards = queueBacklog(wine, bottle, input.addedBy, now)
         val undo: Undo = {
             db.withTransaction {
                 dao.deleteBottle(id)
-                cards.forEach { dao.deleteInvitation(it) }
                 dao.deleteOrphanWines()
             }
         }
@@ -452,24 +432,56 @@ class Repo(private val db: AppDb, val photos: PhotoStore) {
             }
         }
         val wine = resolveWine(input.wine, input.photo, overwrite = true)
-        val id = dao.insertTasting(
-            Tasting(
-                wineId = wine.id, profileId = input.profileId, year = input.year, score = input.score,
-                notes = input.notes.trim(), photo = input.photo, createdAt = now, vintage = input.vintage,
-                bottle = input.bottle,
-            )
-        )
+        val tasters = input.tasters.ifEmpty { listOf(Taster(input.profileId, input.score)) }
+        val tastingIds = ArrayList<Long>()
+        val cleared = ArrayList<Invitation>()
+        val cardIds = ArrayList<Long>()
+        for (t in tasters) {
+            if (t.score != null) {
+                tastingIds += dao.insertTasting(
+                    Tasting(
+                        wineId = wine.id, profileId = t.profileId, year = input.year, score = t.score,
+                        notes = input.notes.trim(), photo = input.photo, createdAt = now, vintage = input.vintage,
+                        bottle = input.bottle,
+                    )
+                )
+                // a pending card for the same wine and year is now answered
+                cleared += clearPending(wine.id, t.profileId, input.year)
+            } else if (dao.findInvitation(wine.id, t.profileId, input.year) == null) {
+                // chosen as a taster but no score yet: rating pending
+                cardIds += dao.insertInvitation(
+                    Invitation(
+                        wineId = wine.id, profileId = t.profileId, fromProfileId = t.profileId,
+                        year = input.year, vintage = input.vintage, stage = 1, createdAt = now,
+                        bottle = input.bottle,
+                    )
+                )
+            }
+        }
         released(input.photo)
-        // a pending "did you drink this?" card for the same wine and year is now answered
-        val cleared = clearPending(wine.id, input.profileId, input.year)
+        // everyone else gets "Did you also drink this bottle?", unless they already tasted it or were asked
+        val from = tasters.firstOrNull { it.score != null }?.profileId ?: tasters.first().profileId
+        val taster = tasters.map { it.profileId }.toSet()
+        val tasted = dao.allTastings().filter { it.wineId == wine.id && it.year == input.year }.map { it.profileId }.toSet()
+        for (p in dao.allProfiles()) {
+            if (p.id in taster || p.id in tasted) continue
+            if (dao.findInvitation(wine.id, p.id, input.year) != null) continue
+            cardIds += dao.insertInvitation(
+                Invitation(
+                    wineId = wine.id, profileId = p.id, fromProfileId = from, year = input.year,
+                    vintage = input.vintage, stage = 0, createdAt = now, bottle = input.bottle,
+                )
+            )
+        }
         val undo: Undo = {
             db.withTransaction {
-                dao.deleteTasting(id)
+                tastingIds.forEach { dao.deleteTasting(it) }
+                cardIds.forEach { dao.deleteInvitation(it) }
                 cleared.forEach { if (dao.wine(it.wineId) != null) dao.insertInvitation(it) }
                 dao.deleteOrphanWines()
             }
         }
-        Saved(id, undo)
+        Saved(tastingIds.firstOrNull() ?: 0L, undo)
     }
 
     suspend fun deleteTasting(id: Long): Undo? = db.withTransaction {
