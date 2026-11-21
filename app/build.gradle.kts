@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -17,12 +19,33 @@ android {
         versionName = "1.0.0"
     }
 
+    // One fixed signing key for every build, wherever it is compiled. Android refuses to update an
+    // app signed with another key, and the only way out is to uninstall it, which deletes the cellar.
+    // The key lives outside the repository: see keystore.properties.example and the README.
+    val keystoreFile = rootProject.file("keystore.properties")
+    val keystore = Properties().apply { if (keystoreFile.isFile) keystoreFile.inputStream().use { load(it) } }
+    val fixedKey = keystore.getProperty("storeFile")?.let { file(it) }?.takeIf { it.isFile }
+
+    signingConfigs {
+        if (fixedKey != null) {
+            create("fixed") {
+                storeFile = fixedKey
+                storePassword = keystore.getProperty("storePassword")
+                keyAlias = keystore.getProperty("keyAlias")
+                keyPassword = keystore.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
+        // Without keystore.properties, builds fall back to this computer's debug key, as before.
+        val signing = if (fixedKey != null) signingConfigs.getByName("fixed") else signingConfigs.getByName("debug")
+        debug {
+            signingConfig = signing
+        }
         release {
             isMinifyEnabled = false
-            // Personal app installed straight from the APK: sign the release build
-            // with the debug key so that assembleRelease gives an installable file.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signing
         }
     }
 

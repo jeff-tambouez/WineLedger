@@ -10,3 +10,7 @@
 app/build/
 *.apk
 *.aab
+# Signing key: never in the repository
+/keystore.properties
+*.jks
+*.keystore

@@ -8,6 +8,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.wineledger.app.data.AppData
 import com.wineledger.app.data.AppDb
+import com.wineledger.app.data.AutoBackup
 import com.wineledger.app.data.BottleInput
 import com.wineledger.app.data.BottleSnapshot
 import com.wineledger.app.data.Backup
@@ -141,6 +142,9 @@ enum class ExportKind(val fileName: String, val mime: String) {
  */
 data class Trouble(val title: String, val detail: String, val fromCrash: Boolean)
 
+/** What Settings shows about backups. Times are epoch milliseconds, 0 for never. */
+data class BackupStatus(val folderName: String? = null, val lastAuto: Long = 0L, val lastAny: Long = 0L)
+
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("wineledger", Context.MODE_PRIVATE)
     private val repo = Repo(AppDb.get(app), PhotoStore(app))
@@ -181,15 +185,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _busy = MutableStateFlow<String?>(null)
     val busy: StateFlow<String?> = _busy.asStateFlow()
 
+    private val _backup = MutableStateFlow(BackupStatus())
+    val backup: StateFlow<BackupStatus> = _backup.asStateFlow()
+
     private val _toasts = MutableSharedFlow<Toast>(extraBufferCapacity = 8)
     val toasts: SharedFlow<Toast> = _toasts.asSharedFlow()
 
     init {
         viewModelScope.launch {
-            runCatching {
+            val opened = runCatching {
                 repo.ensureDefaults()
                 repo.cleanup()
-            }.onFailure { reportTrouble("The wine database could not be opened", it) }
+            }.onFailure { reportTrouble("The wine database could not be opened", it) }.isSuccess
+            refreshBackupStatus()
+            if (opened) autoBackupIfDue()
         }
         viewModelScope.launch(Dispatchers.IO) {
             CrashLog.read(getApplication())?.let { report ->
@@ -218,6 +227,73 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun databaseFiles(): String = DbRescue.describe(getApplication())
+
+    // ------------------------------------------------------------------
+    // Automatic backup
+    // ------------------------------------------------------------------
+
+    private suspend fun refreshBackupStatus() {
+        val app = getApplication<Application>()
+        _backup.value = withContext(Dispatchers.IO) {
+            BackupStatus(AutoBackup.folderName(app), AutoBackup.lastAuto(app), AutoBackup.lastAny(app))
+        }
+    }
+
+    /**
+     * Writes the weekly copy when it is due. Never while the database is in trouble, and never an
+     * empty cellar: rotating copies out for an empty one would throw the good copies away.
+     */
+    private suspend fun autoBackupIfDue() {
+        val app = getApplication<Application>()
+        if (_trouble.value != null || !withContext(Dispatchers.IO) { AutoBackup.isDue(app) }) return
+        val ok = writeAutoBackup()
+        if (ok) toast("Weekly backup saved")
+    }
+
+    /** Returns true when a copy was written. Failures are reported in Settings, not as a crash. */
+    private suspend fun writeAutoBackup(): Boolean {
+        val app = getApplication<Application>()
+        val result = runCatching {
+            withContext(Dispatchers.IO) {
+                val snapshot = repo.snapshot()
+                if (snapshot.wines.isEmpty() && snapshot.bottles.isEmpty() && snapshot.tastings.isEmpty()) {
+                    throw ImportException("Nothing to back up yet.")
+                }
+                AutoBackup.write(app) { out -> Backup.write(out, snapshot, repo.photos) }
+            }
+        }
+        refreshBackupStatus()
+        return result.isSuccess
+    }
+
+    fun chooseBackupFolder(uri: Uri) {
+        viewModelScope.launch {
+            val ok = runCatching { withContext(Dispatchers.IO) { AutoBackup.setFolder(getApplication(), uri) } }.isSuccess
+            refreshBackupStatus()
+            if (!ok) { toast("This folder cannot be used for backups"); return@launch }
+            _busy.value = "Backing up…"
+            val saved = writeAutoBackup()
+            _busy.value = null
+            toast(if (saved) "Backup saved. A new copy is made every week." else "The first backup could not be written")
+        }
+    }
+
+    fun backupNow() {
+        viewModelScope.launch {
+            _busy.value = "Backing up…"
+            val saved = writeAutoBackup()
+            _busy.value = null
+            toast(if (saved) "Backup saved" else "Backup failed")
+        }
+    }
+
+    fun stopAutoBackup() {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { AutoBackup.setFolder(getApplication(), null) }
+            refreshBackupStatus()
+            toast("Automatic backup stopped. The copies already saved are kept.")
+        }
+    }
 
     private fun toast(message: String, undo: Undo? = null) {
         _toasts.tryEmit(Toast(message, undo))
@@ -530,6 +606,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         }
                     }
                 }
+            }
+            if (result.isSuccess && kind == ExportKind.BACKUP_ZIP) {
+                withContext(Dispatchers.IO) { AutoBackup.markBackedUp(getApplication(), auto = false) }
+                refreshBackupStatus()
             }
             _busy.value = null
             toast(if (result.isSuccess) "Export saved" else "Export failed: ${result.exceptionOrNull()?.message}")

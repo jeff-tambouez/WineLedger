@@ -36,6 +36,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.wineledger.app.AppViewModel
 import com.wineledger.app.ExportKind
 import com.wineledger.app.activeProfile
+import com.wineledger.app.data.AutoBackup
 import com.wineledger.app.data.Profile
 import com.wineledger.app.logic.todayIso
 
@@ -48,6 +49,7 @@ fun SettingsScreen(vm: AppViewModel) {
     val data by vm.data.collectAsStateWithLifecycle()
     val dark by vm.dark.collectAsStateWithLifecycle()
     val activeId by vm.activeId.collectAsStateWithLifecycle()
+    val backup by vm.backup.collectAsStateWithLifecycle()
     val profile = data.activeProfile(activeId)
     var confirmRestore by remember { mutableStateOf(false) }
 
@@ -67,6 +69,9 @@ fun SettingsScreen(vm: AppViewModel) {
     }
     val exportDb = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         if (uri != null) vm.export(ExportKind.DATABASE_ZIP, uri)
+    }
+    val backupFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) vm.chooseBackupFolder(uri)
     }
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) vm.importFile(uri)
@@ -132,8 +137,42 @@ fun SettingsScreen(vm: AppViewModel) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Text(
+                "Last backup: ${ago(backup.lastAny)}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (backupIsOld(backup.lastAny)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            )
             PrimaryButton("Save a full backup", { exportZip.launch(stamp("backup", "zip")) }, Modifier.fillMaxWidth())
             GhostButton("Restore a backup", { confirmRestore = true }, Modifier.fillMaxWidth())
+        }
+
+        Section("Automatic backup") {
+            val folder = backup.folderName
+            if (folder == null) {
+                Text(
+                    "Choose a folder, ideally one that is copied off the phone (Google Drive, an SD card). " +
+                        "The full backup is then saved there every week when the app opens, and the last " +
+                        "${AutoBackup.KEEP} copies are kept.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                PrimaryButton("Choose a folder", { backupFolder.launch(null) }, Modifier.fillMaxWidth())
+            } else {
+                Text(
+                    "Every week to “$folder”, last ${AutoBackup.KEEP} copies kept. Last copy: ${ago(backup.lastAuto)}.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                PrimaryButton("Back up now", { vm.backupNow() }, Modifier.fillMaxWidth())
+                GhostButton("Change folder", { backupFolder.launch(null) }, Modifier.fillMaxWidth())
+                QuietButton("Stop automatic backup", onClick = { vm.stopAutoBackup() })
+            }
+            Text(
+                "Android also keeps a daily copy of the database in your Google account (without the photos), " +
+                    "restored when the app is installed again.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         Section("Database") {
@@ -149,7 +188,8 @@ fun SettingsScreen(vm: AppViewModel) {
 
         Section("About") {
             Text(
-                "Wine Ledger 1.0. Everything stays on this phone: the app has no network permission and no account.",
+                "Wine Ledger 1.0. The app has no network permission and no account. Only Android's own backup " +
+                    "copies the database to your Google account.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -213,3 +253,18 @@ private fun ProfileEditor(p: Profile, vm: AppViewModel) {
         }
     }
 }
+
+private const val DAY_MS = 24L * 60 * 60 * 1000
+
+private fun ago(time: Long): String {
+    if (time <= 0L) return "never"
+    val days = ((System.currentTimeMillis() - time) / DAY_MS).coerceAtLeast(0)
+    return when (days) {
+        0L -> "today"
+        1L -> "yesterday"
+        else -> "$days days ago"
+    }
+}
+
+/** More than two weeks without any backup: shown in red. */
+private fun backupIsOld(time: Long): Boolean = time <= 0L || System.currentTimeMillis() - time > 14 * DAY_MS
